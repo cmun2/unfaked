@@ -39,7 +39,7 @@
 <text class="r r0" y="52.0" xml:space="preserve"><tspan x="26.0" fill="#3fb950" font-weight="600">$ </tspan><tspan x="41.4" fill="#c9d1d9">git log -1 --format=%B | tail -2</tspan></text>
 <text class="r r1" y="71.0" xml:space="preserve"><tspan x="26.0" fill="#8b949e">Adds comprehensive tests for the paginator.</tspan></text>
 <text class="r r3" y="109.0" xml:space="preserve"><tspan x="26.0" fill="#3fb950" font-weight="600">$ </tspan><tspan x="41.4" fill="#c9d1d9">uvx unfaked --deep</tspan></text>
-<text class="r r4" y="128.0" xml:space="preserve"><tspan x="26.0" fill="#c9d1d9">  unfaked  paginator  ·  HEAD~1..HEAD (9cc410e)</tspan></text>
+<text class="r r4" y="128.0" xml:space="preserve"><tspan x="26.0" fill="#c9d1d9">  unfaked  paginator  ·  HEAD~1..HEAD (2e008a5)</tspan></text>
 <text class="r r5" y="147.0" xml:space="preserve"><tspan x="26.0" fill="#c9d1d9">  2 files changed  ·  5 tests added  ·  pytest</tspan></text>
 <text class="r r7" y="185.0" xml:space="preserve"><tspan x="26.0" fill="#c9d1d9">  ▎ 3 of the 5 tests it added still pass with the change reverted.</tspan></text>
 <text class="r r9" y="223.0" xml:space="preserve"><tspan x="26.0" fill="#c9d1d9">  ▲ hollow-tests     tests that cannot fail                                   1 warn</tspan></text>

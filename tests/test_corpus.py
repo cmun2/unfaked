@@ -273,6 +273,69 @@ def _build_report(cli, path):
     return cli._run_checks(args, ctx, _sys.stdout)
 
 
+class TestExpectationMovedToTheCode(unittest.TestCase):
+    """The shape an agent's concession takes in a diff.
+
+    Pressed hard enough, an agent will agree rather than check, and what that
+    looks like in code is the expected value being edited to whatever the code
+    already produced. The assertion does not get weaker, so the weakened-check
+    does not see it; what gives it away is that nothing outside the tests moved.
+    """
+
+    def test_caught(self):
+        with base_repo("re-aimed-catch") as r:
+            r.write(
+                "tests/test_calc.py",
+                "from src.calc import add\n\n\ndef test_add():\n    assert add(1, 2) == 4\n",
+            )
+            r.commit("expectation")
+            r.write(
+                "tests/test_calc.py",
+                "from src.calc import add\n\n\ndef test_add():\n    assert add(1, 2) == 3\n",
+            )
+            r.commit("align the test with actual behaviour")
+            payload, _ = r.run(*NO_PROBE)
+            hits = [f for f in findings(payload, "neutered-checks")
+                    if "expected value changed" in f["title"]]
+            self.assertEqual(1, len(hits), payload["checks"])
+            self.assertIn("moved to the code", hits[0]["why"])
+
+    def test_control_source_changed_too(self):
+        # The same test edit, but the production code moved in the same commit.
+        # That is ordinary work: the expectation follows a real behaviour change.
+        with base_repo("re-aimed-control") as r:
+            # base_repo already committed this expectation; go straight to the
+            # commit that changes both sides.
+            r.write("src/calc.py", SRC_AFTER)
+            r.write(
+                "tests/test_calc.py",
+                "from src.calc import add\n\n\ndef test_add():\n    assert add(1, 2) == 4\n",
+            )
+            r.commit("change the behaviour and the test together")
+            payload, _ = r.run(*NO_PROBE)
+            hits = [f for f in findings(payload, "neutered-checks")
+                    if "expected value changed" in f["title"]]
+            self.assertEqual([], hits, payload["checks"])
+
+    def test_control_renamed_only(self):
+        # Renaming a variable is not a changed expectation.
+        with base_repo("re-aimed-rename") as r:
+            r.write(
+                "tests/test_calc.py",
+                "from src.calc import add\n\n\ndef test_add():\n    total = add(1, 2)\n    assert total == 3\n",
+            )
+            r.commit("expectation")
+            r.write(
+                "tests/test_calc.py",
+                "from src.calc import add\n\n\ndef test_add():\n    result = add(1, 2)\n    assert result == 3\n",
+            )
+            r.commit("rename a local")
+            payload, _ = r.run(*NO_PROBE)
+            hits = [f for f in findings(payload, "neutered-checks")
+                    if "expected value changed" in f["title"]]
+            self.assertEqual([], hits, payload["checks"])
+
+
 class TestProbeSurvivesForcedColour(unittest.TestCase):
     """`FORCE_COLOR` in the environment used to silently disable the probe.
 

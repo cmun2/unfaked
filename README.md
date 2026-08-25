@@ -15,18 +15,6 @@ says "all tests passing", and nothing was fixed.
 dependencies, no API key, no LLM — every check is deterministic, and every
 finding comes with a file, a line, and the command to reproduce it.
 
-## Every finding carries its own evidence
-
-<p align="center">
-  <img src="docs/finding.svg" alt="A finding showing file and line, the offending code, why it is a problem, how to fix it, and the exact command to reproduce it" width="100%">
-</p>
-
-<sub>Both images are generated, not drawn. `python scripts/render_svg.py` runs
-`examples/demo.py`, which builds that repository and reports on it, then draws the
-output verbatim — so they cannot drift from the tool, and nothing here was typed by
-hand. SVG rather than a GIF: crisp at any width, selectable text, a few kilobytes,
-and it diffs as text in review.</sub>
-
 ## Run it the moment your agent stops
 
 ```jsonc
@@ -116,6 +104,10 @@ as-is. `--exit-zero` turns that off.
 
 ### `hollow-tests` — tests that cannot fail
 
+<p align="center">
+  <img src="docs/check-hollow-tests.svg" alt="A test with no assertion, reported with its file, line, the code, why it is a problem and how to fix it" width="100%">
+</p>
+
 | | |
 |---|---|
 | test body is empty (`pass`, `...`) | **FAIL** |
@@ -127,6 +119,10 @@ as-is. `--exit-zero` turns that off.
 
 ### `revert-probe` — do the new tests notice the change?
 
+<p align="center">
+  <img src="docs/check-revert-probe.svg" alt="A test that still passes with the change reverted, with the exact command that reproduces it" width="100%">
+</p>
+
 Reverts the changed source files, re-runs *only* the tests the diff added, and
 reports every one that still passes. **FAIL**.
 
@@ -135,18 +131,27 @@ for, are listed as INFO — they are not evidence either way.
 
 ### `neutered-checks` — checks switched off instead of satisfied
 
+<p align="center">
+  <img src="docs/check-neutered-checks.svg" alt="A type-ignore comment added instead of the type error being fixed" width="100%">
+</p>
+
 Anchored to lines the diff **added**, so a suppression that predates the change is
 never reported.
 
 | | |
 |---|---|
 | a specific assertion replaced with a vague one (`assertEqual` → `assertTrue`, `toEqual` → `toBeTruthy`) | **FAIL** |
+| an assertion's expected value edited while nothing outside the tests changed | WARN |
 | added skip/xfail: `@pytest.mark.skip`, `@pytest.mark.xfail`, `it.skip(`, `xit(`, `t.Skip(`, `#[ignore]`, `@Disabled` | WARN |
 | added blanket suppression: bare `# noqa`, bare `# type: ignore`, `@ts-ignore`, `@ts-nocheck`, `# mypy: ignore-errors`, file-level `eslint-disable` | WARN |
 | added silent handler: `except: pass`, `except Exception: pass`, `catch {}`, `catch (e) {}`, `.catch(() => {})` | WARN |
 | those same suppressions when they name the rule they turn off (`# noqa: E402`, `# type: ignore[arg-type]`, `eslint-disable-next-line no-shadow`) | INFO |
 
 ### `loose-ends` — what the change left behind
+
+<p align="center">
+  <img src="docs/check-loose-ends.svg" alt="A file left uncommitted, so what was reviewed is not what is on disk" width="100%">
+</p>
 
 | | |
 |---|---|
@@ -233,6 +238,32 @@ them. `unfaked` will not pretend otherwise.
   ]
 }
 ```
+
+## What you get that a prompt does not
+
+Asking an agent to be honest routes the check through the thing being checked.
+The agent that would report a hollow test as a passing test is the same agent
+deciding whether it did. `unfaked` does not ask. It reverts your source and
+re-runs the tests, and reads the diff rather than the summary.
+
+The difference shows up most clearly in the failure people describe as an agent
+"caving": push back hard enough — *"I think it should be X, isn't it?"* — and
+some of them agree instead of checking. That has a shape in the diff, and five
+of those shapes were run against this tool:
+
+| what caving looks like in the code | caught |
+|---|---|
+| the assertion is weakened — `assertEqual` becomes `assertTrue` | **FAIL** |
+| the expected value is edited to whatever the code already returns | **WARN** |
+| the failing test is skipped | WARN |
+| the crash is wrapped in `except: pass` | WARN |
+| the correct change is simply reverted | **no** |
+
+The last row is the honest limit. Reverting is also what a correct retraction
+looks like, and nothing in the diff separates the two — `unfaked` does not read
+the conversation, so it cannot know which one happened. It will not tell you
+your agent was too agreeable. It tells you when agreement was written into the
+tests.
 
 ## What it will not catch
 

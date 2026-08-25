@@ -10,7 +10,7 @@ from typing import Dict, List, Optional, Tuple
 
 from ._finding import FAIL, INFO, WARN, CheckResult, Finding
 from ._git import FileDiff
-from ._lang import PYTHON, JSTS, blank_string_literals, is_code, language
+from ._lang import is_build_artifact, is_lockfile, is_test_file, PYTHON, JSTS, blank_string_literals, is_code, language
 
 NAME = "neutered-checks"
 TITLE = "checks switched off"
@@ -123,6 +123,9 @@ _WEAK = re.compile(
     r"|^\s*assert\s+[A-Za-z_][\w.\[\]()]*\s+is\s+not\s+None\s*$"
 )
 
+# A literal an assertion could compare against: number, string, or bare keyword.
+_LITERAL = re.compile(r"""(?<![\w.])(?:-?\d+(?:\.\d+)?|"[^"]*"|'[^']*'|True|False|None|null|true|false)(?![\w.])""")
+_ASSERTION = re.compile(r"\b(assert|assertEqual|assertEquals|assertIs|expect)\b|\.\s*to(Be|Equal|StrictEqual)\s*\(")
 _IDENT = re.compile(r"[A-Za-z_][A-Za-z0-9_]{2,}")
 
 
@@ -188,6 +191,18 @@ def run(
     evidence_cmd: str,
 ) -> CheckResult:
     res = CheckResult(NAME, TITLE)
+
+    # Whether the change touched anything outside the tests. Used by the
+    # re-aimed-expectation check below: a changed expectation with no production
+    # change behind it is the interesting case.
+    source_changed = any(
+        not fd.binary
+        and fd.status != "D"
+        and not is_test_file(fd.path)
+        and not is_build_artifact(fd.path)
+        and not is_lockfile(fd.path)
+        for fd in diffs
+    )
 
     for fd in diffs:
         if fd.binary or fd.status == "D":
@@ -312,6 +327,52 @@ def run(
                         extra={"kind": "weakened", "before": best[1].strip(), "after": atext.strip()},
                     )
                 )
+
+
+        # --- expectation moved to match the code ---------------------------
+        # An existing assertion kept its shape but changed the value it expects,
+        # while nothing outside the tests moved. The check did not get weaker, it
+        # got re-aimed: the test was brought to the code instead of the code to
+        # the test. That is the usual shape of an agent conceding a point rather
+        # than checking it -- "you're right, it should be X" and the literal is
+        # edited to X.
+        #
+        # WARN, not FAIL: an expectation that was simply wrong is a legitimate
+        # thing to correct. What makes it worth a look is that the correction
+        # arrived with no production change to justify it.
+        if not source_changed:
+            for hunk in fd.hunks:
+                for anum, atext in hunk.added:
+                    a_norm = _LITERAL.sub("\u0000", atext).strip()
+                    if not a_norm or not _ASSERTION.search(atext):
+                        continue
+                    a_lits = _LITERAL.findall(atext)
+                    for _rnum, rtext in hunk.removed:
+                        if _LITERAL.sub("\u0000", rtext).strip() != a_norm:
+                            continue
+                        r_lits = _LITERAL.findall(rtext)
+                        if r_lits == a_lits:
+                            continue
+                        res.add(
+                            Finding(
+                                NAME, WARN, "expected value changed, code did not", fd.path, anum,
+                                ["-\t%s" % rtext.rstrip(), "+\t%s" % atext.rstrip()],
+                                why=(
+                                    "The assertion is the same shape with a different expected "
+                                    "value, and this change touches no source outside the tests, "
+                                    "so the test was moved to the code rather than the code to "
+                                    "the test."
+                                ),
+                                fix=(
+                                    "If the old expectation was wrong, say so in the commit "
+                                    "message. If it was right, the change belongs in the source."
+                                ),
+                                command=evidence_cmd,
+                                extra={"kind": "re-aimed", "before": rtext.strip(),
+                                       "after": atext.strip()},
+                            )
+                        )
+                        break
 
     return res.finalize()
 

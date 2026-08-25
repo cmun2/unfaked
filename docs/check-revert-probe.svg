@@ -12,7 +12,7 @@
 <circle cx="45" cy="18" r="5.5" fill="#febc2e"/>
 <circle cx="64" cy="18" r="5.5" fill="#28c840"/>
 <text x="349" y="18" fill="#6e7681" font-size="11.5"
-      text-anchor="middle">one finding</text>
+      text-anchor="middle">revert-probe</text>
 <text y="52.0" xml:space="preserve"><tspan x="26.0" fill="#c9d1d9">  ✗  tests/test_paginator.py:21                                         revert-probe</tspan></text>
 <text y="71.0" xml:space="preserve"><tspan x="26.0" fill="#c9d1d9">     still passes with the change reverted: test_paginate_first_page</tspan></text>
 <text y="90.0" xml:space="preserve"><tspan x="26.0" fill="#c9d1d9">          21 │ def test_paginate_first_page():</tspan></text>

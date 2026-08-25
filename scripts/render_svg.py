@@ -211,6 +211,31 @@ def still(lines, out_path: str, title: str) -> None:
         fh.write(frame(width, height, title, "\n".join(body)))
 
 
+
+def finding_blocks(lines):
+    """{check name: the first finding block that check reported}.
+
+    A block runs from its header -- two spaces, a severity glyph, the subject,
+    and the check name flushed right -- to the header of the next one.
+    """
+    plain = [_ANSI.sub("", l) for l in lines]
+    heads = []
+    for i, l in enumerate(plain):
+        m = re.match(r"^\s{2}[\u2717\u25b2?]\s{2}\S.*?(\S+)\s*$", l)
+        if m:
+            heads.append((i, m.group(1)))
+    out = {}
+    for n, (i, name) in enumerate(heads):
+        if name in out:
+            continue
+        end = heads[n + 1][0] if n + 1 < len(heads) else len(lines)
+        block = [l for l in lines[i:end] if l.strip() and not set(_ANSI.sub("", l).strip()) <= {"\u2500"}]
+        if block:
+            out[name] = block
+    return out
+
+
+
 def demo_output() -> list:
     env = dict(os.environ, COLUMNS="84")
     env.pop("FORCE_COLOR", None)
@@ -238,24 +263,18 @@ def main() -> int:
     os.makedirs(args.outdir, exist_ok=True)
 
     lines = demo_output()
-    summary = lines[:12]
+    animated(lines[:12], os.path.join(args.outdir, "demo.svg"))
+    written = ["demo.svg"]
 
-    # One complete finding, from its header to the `run` line that reproduces it.
-    # Sliced at the block boundaries the renderer emits rather than by index, so
-    # it stays a whole finding when the report changes shape.
-    plain = [_ANSI.sub("", l) for l in lines]
-    starts = [i for i, l in enumerate(plain) if re.match(r"^\s{2}[✗▲?]\s{2}\S", l)]
-    if not starts:
-        raise SystemExit("no finding block in the demo output")
-    begin = starts[0]
-    end = starts[1] if len(starts) > 1 else len(lines)
-    detail = [l for l in lines[begin:end] if l.strip()]
+    # One SVG per check, each showing a real finding that check produced. Sliced
+    # at the block boundaries the renderer emits rather than by index, so a block
+    # stays whole when the report changes shape.
+    for name, block in finding_blocks(lines).items():
+        out = os.path.join(args.outdir, "check-%s.svg" % name)
+        still(block, out, name)
+        written.append(os.path.basename(out))
 
-    animated(summary, os.path.join(args.outdir, "demo.svg"))
-    still(detail, os.path.join(args.outdir, "finding.svg"), "one finding")
-    sys.stderr.write(
-        "demo.svg: %d lines animated · finding.svg: %d lines\n" % (len(summary), len(detail))
-    )
+    sys.stderr.write("wrote %s\n" % ", ".join(written))
     return 0
 
 
