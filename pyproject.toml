@@ -1,0 +1,42 @@
+[build-system]
+requires = ["hatchling>=1.18"]
+build-backend = "hatchling.build"
+
+[project]
+name = "unfaked"
+version = "0.1.0"
+description = "Your agent said it's done. unfaked checks whether it made that true, or just made the check pass."
+readme = "README.md"
+requires-python = ">=3.9"
+license = { text = "MIT" }
+authors = [{ name = "unfaked contributors" }]
+keywords = [
+    "testing", "code-review", "ai-agents", "coding-agent", "static-analysis",
+    "pytest", "jest", "vitest", "ci", "verification",
+]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Environment :: Console",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Software Development :: Quality Assurance",
+    "Topic :: Software Development :: Testing",
+]
+# Zero dependencies. On purpose. It has to work the moment you type `uvx unfaked`.
+dependencies = []
+
+[project.urls]
+Homepage = "https://github.com/unfaked/unfaked"
+Issues = "https://github.com/unfaked/unfaked/issues"
+
+[project.scripts]
+unfaked = "unfaked.cli:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["unfaked"]
