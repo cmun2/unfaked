@@ -199,7 +199,10 @@ def main():
     path = os.path.join(tempfile.mkdtemp(prefix="unfaked-demo-"), "paginator")
     os.makedirs(path)
     build(path)
-    argv = [path]
+    # --deep, because the point of the demo is the revert probe. The fast
+    # default would report it as `not run`, which is the honest thing for a
+    # hook to say and the wrong thing for a demo to show.
+    argv = [path, "--deep"]
     if args.no_color:
         argv.append("--no-color")
 

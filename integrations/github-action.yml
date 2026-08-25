@@ -1,0 +1,59 @@
+# Gate pull requests on the revert probe.
+#
+# Copy to .github/workflows/unfaked.yml
+#
+# CI is the right place for --deep: it has the time the agent hand-off does
+# not, and a PR is exactly where a test that proves nothing costs the most.
+
+name: unfaked
+
+on:
+  pull_request:
+
+jobs:
+  unfaked:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # --base needs the merge-base, so the default depth-1 clone is not enough
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      # The probe re-runs the tests the PR added, so they have to be runnable.
+      # Replace with your project's install step.
+      - run: pip install -e ".[dev]"
+
+      - uses: astral-sh/setup-uv@v5
+
+      - name: unfaked --deep
+        run: |
+          uvx unfaked \
+            --base "origin/${{ github.base_ref }}" \
+            --deep \
+            --timeout 900
+
+      # Keep the report even when the gate fails.
+      - name: report
+        if: always()
+        run: |
+          uvx unfaked \
+            --base "origin/${{ github.base_ref }}" \
+            --deep --json --exit-zero > unfaked.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: unfaked-report
+          path: unfaked.json
+
+# Turning it on gradually
+#
+# On an existing repo the first run usually finds something. To land the gate
+# without a red PR queue, start with `--exit-zero` on the gate step, read the
+# reports for a week, then remove it.
+#
+# To let one check through while you work on it:
+#     uvx unfaked --base ... --deep --skip loose-ends

@@ -12,7 +12,7 @@ dependencies, no API key, no LLM — every check is deterministic, and every
 finding comes with a file, a line, and the command to reproduce it.
 
 ```console
-$ uvx unfaked
+$ uvx unfaked --deep
 ```
 
 ```
@@ -150,16 +150,25 @@ pip install unfaked
 
 Python 3.9+. No dependencies, ever.
 
+> Not on PyPI yet, so those three lines do not work at this commit. Until then:
+> `git clone` and run `python -m unfaked`, or `pipx install .` from the clone.
+
 ## Use
 
 ```console
 unfaked                             # inspect HEAD~1..HEAD in the current repo
+unfaked --deep                      # also re-run the added tests with the change reverted
 unfaked --base main                 # everything since main
 unfaked ../some/repo --base v1.2.0
 unfaked --scope 'src/**'            # flag edits outside the task you gave it
-unfaked --skip revert-probe         # static only; never runs your code
 unfaked --json                      # machine-readable
 ```
+
+The default is **fast**: static checks only, no test run, well under a second
+on the repos below. That is deliberate — the moment this is for is the one
+right after an agent says it is done, and nothing that takes seven seconds
+survives in that slot. `--deep` adds the revert probe, which re-runs your
+suite once per added test. Keep it for review and CI.
 
 Exit code is `1` when there is a FAIL and `0` otherwise, so it drops into CI
 as-is. `--exit-zero` turns that off.
@@ -169,12 +178,37 @@ as-is. `--exit-zero` turns that off.
 | `--base REF` | compare against `REF` (default `HEAD~1`) |
 | `--head REF` | the reviewed revision (default `HEAD`) |
 | `--scope GLOB` | files the task was allowed to touch; repeatable |
+| `--fast` / `--deep` | static only (default), or add the revert probe |
 | `--skip CHECK` / `--only CHECK` | pick checks; repeatable, comma-separated |
 | `--json` | full report as JSON |
 | `--no-color` | plain text (also honours `NO_COLOR`; auto-off when piped) |
 | `-v` | show INFO findings as well |
 | `--exit-zero` | always exit 0 |
 | `--timeout SEC` | cap on each test run (default 600) |
+
+## Run it without remembering to
+
+Typing a command is the part that does not happen. Three ways to remove it,
+in `integrations/`:
+
+**[Claude Code hook](integrations/claude-code-hook.md)** — fires the moment
+the agent stops, before you read its summary. Fast mode, `--exit-zero`, one
+line when clean.
+
+```json
+{ "hooks": { "Stop": [ { "hooks": [
+  { "type": "command", "command": "uvx unfaked --exit-zero" }
+] } ] } }
+```
+
+**[Agent skill](integrations/skill/SKILL.md)** — drop into `.claude/skills/`
+and the agent checks its own work before reporting done, including running
+`--deep` on a bug fix. Copy `integrations/skill/` to
+`~/.claude/skills/unfaked/`.
+
+**[GitHub Action](integrations/github-action.yml)** — `--deep` on every pull
+request, which is where a test that proves nothing costs the most. Copy to
+`.github/workflows/`.
 
 ## What it checks
 
@@ -337,7 +371,8 @@ things usually worth a look; anything `unfaked` cannot back with a file, a line
 and a command is not reported at all.
 
 Measured against three real repositories — 8 commits in total, all verified by
-hand first — **0 false-positive FAILs**.
+hand first — **0 false-positive FAILs**. Run with `--deep`, so the probe is
+included; the fast default would report it as `not run` on all three.
 
 A fork of `anthropic-sdk-python`: a bug fix plus 9 new tests. This repository
 runs pytest under `-n auto`, and pytest says this on every run:

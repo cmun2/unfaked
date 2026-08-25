@@ -188,12 +188,17 @@ def headline(report: Report) -> str:
     return "Nothing faked found."
 
 
-def render(report: Report, st: Style, w: Optional[int] = None) -> str:
+def render(report: Report, st: Style, w: Optional[int] = None, quiet: bool = False) -> str:
     w = w or width()
     ctx = report.ctx
     L: List[str] = []
     pad = "  "
     inner = w - len(pad)
+
+    if quiet and not report.count(FAIL) and not report.count(WARN):
+        # Hook mode with nothing to say. A tool that prints a table after every
+        # turn gets muted, and a muted tool reports nothing at all.
+        return "  %s %s\n" % (st.bgreen("▎"), st.grey(headline(report)))
 
     # --- header -----------------------------------------------------------
     L.append("")

@@ -134,6 +134,12 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--exit-zero", action="store_true", help="always exit 0")
     p.add_argument("-v", "--verbose", action="store_true", help="show INFO findings too")
     p.add_argument(
+        "-q",
+        "--quiet",
+        action="store_true",
+        help="print one line when there is nothing to report (for hooks)",
+    )
+    p.add_argument(
         "--timeout", type=int, default=600, metavar="SEC", help="per test run (default: 600)"
     )
     p.add_argument("--list-checks", action="store_true", help="print check names and exit")
@@ -378,7 +384,7 @@ def main(argv: Optional[List[str]] = None) -> int:
         sys.stdout.write("\n")
     else:
         st = Style(color_enabled(args.no_color))
-        sys.stdout.write(render(report, st))
+        sys.stdout.write(render(report, st, quiet=args.quiet))
 
     return 0 if args.exit_zero else report.exit_code
 
