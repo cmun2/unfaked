@@ -205,7 +205,7 @@ class TestRevertProbe(unittest.TestCase):
                 "    assert add(2, 3) == 5\n",
             )
             r.commit("guard against None, with a test")
-            payload, code = r.run()
+            payload, code = r.run("--deep")
             hits = fails(payload, "revert-probe")
             self.assertEqual(1, len(hits), payload["checks"])
             self.assertIn("still passes with the change reverted", hits[0]["title"])
@@ -224,7 +224,7 @@ class TestRevertProbe(unittest.TestCase):
                 "        add(None, 1)\n",
             )
             r.commit("guard against None, with a test")
-            payload, code = r.run()
+            payload, code = r.run("--deep")
             self.assertEqual([], fails(payload, "revert-probe"), payload["checks"])
             self.assertEqual("ok", check_status(payload, "revert-probe"))
             self.assertEqual(0, code)
@@ -243,7 +243,7 @@ class TestRevertProbe(unittest.TestCase):
                 return sorted(l for l in out.splitlines() if "__pycache__" not in l)
 
             before = status()
-            r.run()
+            r.run("--deep")
             self.assertEqual(before, status())
             with open(r.path + "/src/calc.py") as fh:
                 self.assertEqual(SRC_AFTER, fh.read())
@@ -254,9 +254,67 @@ class TestRevertProbe(unittest.TestCase):
             r.write("tests/test_guard.py", "from src.calc import add\n\n\ndef test_x():\n    assert add(2, 3) == 5\n")
             r.commit("guard")
             r.write("src/calc.py", SRC_AFTER + "\n# scratch\n")
-            payload, code = r.run()
+            payload, code = r.run("--deep")
             self.assertEqual("inconclusive", check_status(payload, "revert-probe"))
             self.assertEqual([], fails(payload, "revert-probe"))
+
+
+class TestFastIsTheDefault(unittest.TestCase):
+    """The probe re-runs the suite once per added test, so it is opt-in.
+
+    Fast mode is what makes this usable on every agent hand-off; if the probe
+    ever creeps back into the default these tests fail.
+    """
+
+    def _vacuous(self, name):
+        r = base_repo(name)
+        ctx = r.__enter__()
+        ctx.write("src/calc.py", SRC_AFTER)
+        ctx.write(
+            "tests/test_guard.py",
+            "from src.calc import add\n\n\ndef test_guard_rejects_none():\n    assert add(2, 3) == 5\n",
+        )
+        ctx.commit("guard against None, with a test")
+        return r, ctx
+
+    def test_default_does_not_run_the_probe(self):
+        r, ctx = self._vacuous("mode-default")
+        try:
+            payload, code = ctx.run()
+            self.assertEqual("inconclusive", check_status(payload, "revert-probe"))
+            self.assertIn("--deep", payload["checks"][1]["note"])
+            # the vacuous test goes unnoticed, and nothing claims otherwise
+            self.assertEqual([], fails(payload, "revert-probe"))
+            self.assertNotIn("with the change reverted", payload["headline"])
+        finally:
+            r.__exit__(None, None, None)
+
+    def test_explicit_fast_matches_the_default(self):
+        r, ctx = self._vacuous("mode-fast")
+        try:
+            payload, _ = ctx.run("--fast")
+            self.assertEqual("inconclusive", check_status(payload, "revert-probe"))
+        finally:
+            r.__exit__(None, None, None)
+
+    def test_deep_runs_it(self):
+        r, ctx = self._vacuous("mode-deep")
+        try:
+            payload, code = ctx.run("--deep")
+            self.assertEqual(1, len(fails(payload, "revert-probe")))
+            self.assertEqual(1, code)
+        finally:
+            r.__exit__(None, None, None)
+
+    def test_only_revert_probe_asks_for_it_by_name(self):
+        # Naming the check is an explicit request; requiring --deep as well
+        # would just be a second way to say the same thing.
+        r, ctx = self._vacuous("mode-only")
+        try:
+            payload, _ = ctx.run("--only", "revert-probe")
+            self.assertEqual(1, len(fails(payload, "revert-probe")))
+        finally:
+            r.__exit__(None, None, None)
 
 
 # ---------------------------------------------------------------------------

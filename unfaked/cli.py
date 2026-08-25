@@ -91,10 +91,14 @@ def build_parser() -> argparse.ArgumentParser:
             "checks:\n"
             + "\n".join("  %-16s %s" % (n, t) for n, t in CHECKS)
             + "\n\nexamples:\n"
-            "  unfaked                       # inspect HEAD~1..HEAD here\n"
+            "  unfaked                       # inspect HEAD~1..HEAD here (fast)\n"
+            "  unfaked --deep                # also re-run the tests with the change reverted\n"
             "  unfaked --base main           # inspect everything since main\n"
             "  unfaked --scope 'src/**'      # flag edits outside the task\n"
-            "  unfaked --skip revert-probe   # static checks only, never runs your code\n"
+            "\n"
+            "fast is the default because the moment this is for -- an agent has just\n"
+            "said it is done -- cannot afford to wait. --deep runs your test suite\n"
+            "several times, so keep it for review and CI.\n"
         ),
     )
     p.add_argument("path", nargs="?", default=".", help="repository to inspect (default: .)")
@@ -111,6 +115,20 @@ def build_parser() -> argparse.ArgumentParser:
         "--skip", action="append", default=[], metavar="CHECK", help="disable a check; repeatable"
     )
     p.add_argument("--only", action="append", default=[], metavar="CHECK", help="run only this check")
+    mode = p.add_mutually_exclusive_group()
+    mode.add_argument(
+        "--fast",
+        dest="deep",
+        action="store_false",
+        default=False,
+        help="static checks only, never runs your code (default)",
+    )
+    mode.add_argument(
+        "--deep",
+        dest="deep",
+        action="store_true",
+        help="also revert the change and re-run the added tests",
+    )
     p.add_argument("--json", action="store_true", help="machine-readable output")
     p.add_argument("--no-color", action="store_true", help="disable ANSI colour")
     p.add_argument("--exit-zero", action="store_true", help="always exit 0")
@@ -195,7 +213,11 @@ def _run_checks(args, ctx: Context, out_stream) -> Report:
         }
     )
     source_status = {fd.path: fd.status for fd in diffs}
-    if _enabled(_probe.NAME, args):
+    if not _enabled(_probe.NAME, args):
+        results.append(_skipped(_probe.NAME, _probe.TITLE))
+    elif not _deep_requested(args):
+        results.append(_deferred(_probe.NAME, _probe.TITLE, bool(added_tests)))
+    else:
         runners, _notes = _probe.detect_runners(repo, added_tests)
         ctx.runner_label = ", ".join(sorted(getattr(r, "label", "?") for r in runners.values()))
         results.append(
@@ -212,8 +234,6 @@ def _run_checks(args, ctx: Context, out_stream) -> Report:
                 evidence,
             )
         )
-    else:
-        results.append(_skipped(_probe.NAME, _probe.TITLE))
 
     # B ----------------------------------------------------------------------
     if _enabled(_check_neutered.NAME, args):
@@ -251,6 +271,35 @@ def _skipped(name: str, title: str) -> CheckResult:
     r = CheckResult(name, title)
     r.skipped = True
     r.note = "disabled with --skip"
+    return r.finalize()
+
+
+def _deep_requested(args) -> bool:
+    """--deep, or --only revert-probe, which asks for it by name."""
+    if args.deep:
+        return True
+    onlys = {s.strip() for item in args.only for s in item.split(",") if s.strip()}
+    return _probe.NAME in onlys
+
+
+def _deferred(name: str, title: str, has_tests: bool) -> CheckResult:
+    """Not run because this is fast mode -- the default.
+
+    Distinct from _skipped(): the user did not turn this off, so say what it
+    would have done and how to ask for it. Staying under a couple of seconds is
+    what makes it usable on every agent hand-off, and this check re-runs the
+    suite once per added test.
+    """
+    r = CheckResult(name, title)
+    # inconclusive, not skipped: nobody turned this off, it simply has no
+    # verdict yet. "skipped" would read as the user's choice.
+    r.status = "inconclusive"
+    r.note = (
+        "not run in fast mode -- `unfaked --deep` reverts the change and re-runs "
+        "the added tests"
+        if has_tests
+        else "no tests were added in this range, so --deep would have nothing to re-run"
+    )
     return r.finalize()
 
 
