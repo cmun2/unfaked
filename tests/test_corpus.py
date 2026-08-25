@@ -391,6 +391,61 @@ class TestNeuteredSwallowedExceptions(unittest.TestCase):
             self.assertEqual([], findings(payload, "neutered-checks"), payload["checks"])
 
 
+class TestNeuteredPrecision(unittest.TestCase):
+    """The patterns must not fire on text that merely mentions them."""
+
+    def test_pattern_inside_a_python_string_is_not_a_suppression(self):
+        with base_repo("b5-string") as r:
+            r.write(
+                "src/lint_rules.py",
+                'RULES = [\n'
+                '    ("# type: ignore", "blanket type suppression"),\n'
+                '    ("@pytest.mark.skip", "disabled test"),\n'
+                ']\n',
+            )
+            r.commit("describe the rules")
+            payload, _ = r.run(*NO_PROBE)
+            self.assertEqual([], findings(payload, "neutered-checks"), payload["checks"])
+
+    def test_pattern_inside_a_js_string_is_not_a_suppression(self):
+        with base_repo("b5js-string") as r:
+            r.write(
+                "src/rules.ts",
+                "export const RULES = ['// @ts-ignore', '// eslint-disable'];\n",
+            )
+            r.commit("describe the rules")
+            payload, _ = r.run(*NO_PROBE)
+            self.assertEqual([], findings(payload, "neutered-checks"), payload["checks"])
+
+    def test_a_real_comment_is_still_a_suppression(self):
+        with base_repo("b5-comment") as r:
+            r.write("src/rules.ts", "// @ts-ignore\nexport const x = 1;\n")
+            r.commit("port")
+            self.assertTrue(warns(r.run(*NO_PROBE)[0], "neutered-checks"))
+
+    def test_markdown_is_not_scanned(self):
+        with base_repo("b5-md") as r:
+            r.write(
+                "docs/style.md",
+                "Never add a bare `# type: ignore`, and never `@pytest.mark.skip` a test.\n",
+            )
+            r.commit("write down the rules")
+            payload, _ = r.run(*NO_PROBE)
+            self.assertEqual([], findings(payload, "neutered-checks"), payload["checks"])
+
+    def test_narrow_except_pass_is_only_info(self):
+        with base_repo("b5-narrow") as r:
+            r.write(
+                "src/calc.py",
+                "def add(a, b):\n    try:\n        return a + b\n    except OverflowError:\n        pass\n",
+            )
+            r.commit("tolerate overflow")
+            payload, code = r.run(*NO_PROBE)
+            self.assertEqual([], warns(payload, "neutered-checks"))
+            self.assertTrue(findings(payload, "neutered-checks", "INFO"))
+            self.assertEqual(0, code)
+
+
 class TestNeuteredWeakenedAssertions(unittest.TestCase):
     def test_caught_python(self):
         r = Repo("b4-catch")

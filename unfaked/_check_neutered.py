@@ -10,7 +10,7 @@ from typing import Dict, List, Optional, Tuple
 
 from ._finding import FAIL, INFO, WARN, CheckResult, Finding
 from ._git import FileDiff
-from ._lang import PYTHON, JSTS, language
+from ._lang import PYTHON, JSTS, blank_string_literals, is_code, language
 
 NAME = "neutered-checks"
 TITLE = "checks switched off"
@@ -199,10 +199,20 @@ def run(
         lines = src.split("\n") if src is not None else []
         lang = language(fd.path)
 
+        # Match against a copy with string contents blanked out, so a pattern
+        # that only occurs inside a literal is not mistaken for a suppression
+        # somebody wrote. Snippets still come from the real source.
+        if src is not None and is_code(fd.path):
+            masked_lines = blank_string_literals(fd.path, src).split("\n")
+        else:
+            masked_lines = lines
+
         seen_lines = set()
 
         for lineno, text in sorted(added.items()):
-            body = _strip_comment_only(text)
+            if not is_code(fd.path):
+                continue
+            body = masked_lines[lineno - 1] if lineno <= len(masked_lines) else _strip_comment_only(text)
             for pat, label, why, fix in _SKIP_PATTERNS:
                 if pat.search(body):
                     res.add(
@@ -240,12 +250,18 @@ def run(
             for lineno, broad in _py_empty_handlers(src):
                 if lineno not in added:
                     continue
+                # A narrow `except OSError: pass` is usually a deliberate
+                # best-effort; a broad one silences errors nobody has seen yet.
                 res.add(
                     Finding(
-                        NAME, WARN, "exception swallowed silently", fd.path, lineno,
+                        NAME, WARN if broad else INFO, "exception swallowed silently", fd.path, lineno,
                         _snip(lines, lineno, 2),
                         why="The handler discards the error, so a failure here looks like success."
-                        + (" It also catches everything, including bugs you did not anticipate." if broad else ""),
+                        + (
+                            " It also catches everything, including bugs you did not anticipate."
+                            if broad
+                            else " It is narrow, so this is often deliberate."
+                        ),
                         fix="Log it, re-raise it, or narrow the except to the one error you can actually handle.",
                         command=evidence_cmd,
                         extra={"kind": "swallow", "broad": broad},

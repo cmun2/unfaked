@@ -16,7 +16,7 @@ $ uvx unfaked
 ```
 
 ```
-  unfaked  paginator  ·  HEAD~1..HEAD (0f79972)
+  unfaked  paginator  ·  HEAD~1..HEAD (e08f6a6)
   2 files changed  ·  5 tests added  ·  pytest
 
   ▎ 3 of the 5 tests it added still pass with the change reverted.
@@ -242,9 +242,9 @@ them. `unfaked` will not pretend otherwise.
 ```json
 {
   "version": "0.1.0",
-  "repo": "/tmp/unfaked-demo-vytmjo0i/paginator",
-  "base": "199b887dfacff0c039eb14d1b0ebd34d85fa270f",
-  "head": "d7077b72e47915e264ad7974e2efe8f77d512a3f",
+  "repo": "/tmp/unfaked-demo-7q4_8xd8/paginator",
+  "base": "4ed85927b599193794d9c4916ac72e8c2d0385bf",
+  "head": "3745a7857f2d1919cf92077889568b04e44b505b",
   "range": "HEAD~1..HEAD",
   "headline": "3 of the 5 tests it added still pass with the change reverted.",
   "files_changed": 2,
@@ -336,8 +336,8 @@ output again. FAIL is reserved for things with no innocent reading; WARN is for
 things usually worth a look; anything `unfaked` cannot back with a file, a line
 and a command is not reported at all.
 
-Measured against three real repositories whose commits were verified by hand
-first — **0 false-positive FAILs**.
+Measured against three real repositories — 8 commits in total, all verified by
+hand first — **0 false-positive FAILs**.
 
 A fork of `anthropic-sdk-python`: a bug fix plus 9 new tests. This repository
 runs pytest under `-n auto`, and pytest says this on every run:

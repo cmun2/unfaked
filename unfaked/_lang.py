@@ -217,8 +217,12 @@ _JS_DESCRIBE = re.compile(
 )
 
 
-def _blank_noncode(src: str) -> str:
-    """Replace string/comment bodies with spaces so brace matching is sane.
+def _blank_noncode(src: str, comments: bool = True) -> str:
+    """Replace string (and optionally comment) bodies with spaces.
+
+    Used two ways: with comments blanked, so brace matching is sane; and with
+    them kept, so a suppression comment is still visible while the same text
+    inside a string literal is not.
 
     Newlines are preserved so every offset keeps its original line number.
     Regex literals are not handled; a file that trips the scanner just yields
@@ -229,13 +233,13 @@ def _blank_noncode(src: str) -> str:
     n = len(src)
     while i < n:
         c = src[i]
-        if c == "/" and i + 1 < n and src[i + 1] == "/":
+        if comments and c == "/" and i + 1 < n and src[i + 1] == "/":
             j = src.find("\n", i)
             j = n if j == -1 else j
             for k in range(i, j):
                 out[k] = " "
             i = j
-        elif c == "/" and i + 1 < n and src[i + 1] == "*":
+        elif comments and c == "/" and i + 1 < n and src[i + 1] == "*":
             j = src.find("*/", i + 2)
             j = n if j == -1 else j + 2
             for k in range(i, j):
@@ -354,6 +358,61 @@ def _line_index(src: str):
         return lo + 1
 
     return line_of
+
+
+_CODE_EXTS = _PY_EXT + _JSTS_EXT + (
+    ".go", ".rs", ".rb", ".java", ".kt", ".kts", ".cs", ".swift", ".scala",
+    ".c", ".cc", ".cpp", ".cxx", ".h", ".hh", ".hpp", ".m", ".mm",
+    ".php", ".ex", ".exs", ".erl", ".dart", ".sh", ".bash", ".zsh",
+)
+
+
+def is_code(path: str) -> bool:
+    """True for files where a suppression comment means something.
+
+    Markdown, JSON and the like are excluded: `# noqa` in a README is prose
+    about a suppression, not a suppression.
+    """
+    return path.lower().endswith(_CODE_EXTS)
+
+
+def blank_string_literals(path: str, source: str) -> str:
+    """Return `source` with string contents replaced by spaces, comments kept.
+
+    A pattern that only matches inside a string literal is data -- a fixture, a
+    regex, a message -- not a suppression someone added to their own code.
+    Offsets and line numbers are preserved, so a match position in the result
+    addresses the same place in the original.
+    """
+    lang = language(path)
+    if lang == JSTS:
+        return _blank_noncode(source, comments=False)
+    if lang != PYTHON:
+        return source
+    try:
+        import io
+        import tokenize
+
+        out = list(source)
+        lines = source.split("\n")
+        starts = [0]
+        for ln in lines[:-1]:
+            starts.append(starts[-1] + len(ln) + 1)
+        for tok in tokenize.generate_tokens(io.StringIO(source).readline):
+            if tok.type != tokenize.STRING and getattr(tokenize, "FSTRING_START", None) != tok.type:
+                continue
+            (r1, c1), (r2, c2) = tok.start, tok.end
+            begin = starts[r1 - 1] + c1
+            end = starts[r2 - 1] + c2
+            for k in range(begin, min(end, len(out))):
+                if out[k] != "\n":
+                    out[k] = " "
+        return "".join(out)
+    except Exception:
+        # A file we cannot tokenise is left alone; the checks then behave as
+        # they did before, which is noisier but never wrong in the other
+        # direction.
+        return source
 
 
 def discover_tests(path: str, source: str) -> List[TestFn]:
