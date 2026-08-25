@@ -3,7 +3,7 @@
 **Your agent said it's done. `unfaked` checks whether it made that true, or just made the check pass.**
 
 <p align="center">
-  <img src="docs/hero.svg" alt="unfaked reporting that 3 of the 5 tests an agent added still pass with its change reverted" width="100%">
+  <img src="docs/demo.svg" alt="An agent commit claiming comprehensive tests, then unfaked reporting that 3 of the 5 tests it added still pass with the change reverted" width="100%">
 </p>
 
 A coding agent that cannot finish a task can always finish the *report*. It skips
@@ -21,9 +21,11 @@ finding comes with a file, a line, and the command to reproduce it.
   <img src="docs/finding.svg" alt="A finding showing file and line, the offending code, why it is a problem, how to fix it, and the exact command to reproduce it" width="100%">
 </p>
 
-<sub>Both images are generated, not drawn: `python scripts/render_svg.py docs/hero.svg`
-runs `examples/demo.py`, which builds that repository and reports on it. Nothing in
-this README was typed by hand.</sub>
+<sub>Both images are generated, not drawn. `python scripts/render_svg.py` runs
+`examples/demo.py`, which builds that repository and reports on it, then draws the
+output verbatim — so they cannot drift from the tool, and nothing here was typed by
+hand. SVG rather than a GIF: crisp at any width, selectable text, a few kilobytes,
+and it diffs as text in review.</sub>
 
 ## Run it the moment your agent stops
 
