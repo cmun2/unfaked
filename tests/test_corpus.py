@@ -3,6 +3,7 @@
 Run with:  python -m unittest discover -s tests -v
 """
 
+import os
 import unittest
 
 from harness import NO_PROBE, Repo, check_status, fails, findings, warns
@@ -270,6 +271,52 @@ def _build_report(cli, path):
     ctx.range_label = "HEAD~1..HEAD (%s)" % cli.short(ctx.repo, "HEAD")
     import sys as _sys
     return cli._run_checks(args, ctx, _sys.stdout)
+
+
+class TestProbeSurvivesForcedColour(unittest.TestCase):
+    """`FORCE_COLOR` in the environment used to silently disable the probe.
+
+    The runner wrapped its per-test report in escape sequences, the parser found
+    no results, and the check degraded to "not run" -- honest, but the one check
+    that matters was gone. It is set in CI images and in some shells, so this
+    pins it.
+    """
+
+    def setUp(self):
+        try:
+            import pytest  # noqa: F401
+        except ImportError:  # pragma: no cover
+            self.skipTest("pytest is not installed; the probe cannot run")
+        self._saved = {k: os.environ.get(k) for k in ("FORCE_COLOR", "CLICOLOR_FORCE")}
+        os.environ["FORCE_COLOR"] = "1"
+        os.environ["CLICOLOR_FORCE"] = "1"
+
+    def tearDown(self):
+        for k, v in self._saved.items():
+            if v is None:
+                os.environ.pop(k, None)
+            else:
+                os.environ[k] = v
+
+    def test_probe_still_reaches_a_verdict(self):
+        with base_repo("colour-forced") as r:
+            r.write("src/calc.py", SRC_AFTER)
+            r.write(
+                "tests/test_guard.py",
+                "from src.calc import add\n\n\ndef test_guard():\n    assert add(2, 3) == 5\n",
+            )
+            r.commit("guard against None, with a test")
+            payload, code = r.run("--deep")
+            self.assertEqual(1, len(fails(payload, "revert-probe")), payload["checks"])
+            self.assertEqual(1, code)
+
+    def test_clean_env_strips_the_colour_forcing_variables(self):
+        from unfaked import _probe
+
+        env = _probe._clean_env()
+        self.assertNotIn("FORCE_COLOR", env)
+        self.assertNotIn("CLICOLOR_FORCE", env)
+        self.assertEqual("1", env["NO_COLOR"])
 
 
 class TestFastIsTheDefault(unittest.TestCase):

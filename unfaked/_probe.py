@@ -51,11 +51,29 @@ class RunOutcome:
 
 
 def _clean_env() -> Dict[str, str]:
-    """Run the suite without letting it litter the tree we are about to restore."""
+    """Run the suite without letting it litter the tree we are about to restore.
+
+    Colour is stripped as well. We read per-test verdicts out of the runner's
+    own report, and `FORCE_COLOR` in the ambient environment makes it wrap those
+    lines in escape sequences, which used to leave the probe with no results at
+    all -- reported honestly as "not run", but silently losing the check that
+    matters. It is set in plenty of CI images and in some people's shells.
+    """
     env = dict(os.environ)
     env["PYTHONDONTWRITEBYTECODE"] = "1"
     env.setdefault("CI", "1")
+    env.pop("FORCE_COLOR", None)
+    env.pop("CLICOLOR_FORCE", None)
+    env["NO_COLOR"] = "1"
     return env
+
+
+_ANSI_RE = re.compile(r"\x1b\[[0-9;?]*[ -/]*[@-~]")
+
+
+def _plain(text: str) -> str:
+    """Drop any escape sequences a runner emitted despite being told not to."""
+    return _ANSI_RE.sub("", text)
 
 
 def _which_python(repo: str) -> Optional[str]:
@@ -104,7 +122,7 @@ class PytestRunner:
         return (
             [self._shown_python if shown else self.python, "-m", "pytest"]
             + ids
-            + ["-q", "--no-header", "-rA", "--tb=no", "-p", "no:cacheprovider"]
+            + ["-q", "--no-header", "-rA", "--tb=no", "--color=no", "-p", "no:cacheprovider"]
             + self.extra
         )
 
@@ -124,7 +142,7 @@ class PytestRunner:
             out.ok = False
             out.reason = "pytest did not finish within %ds" % timeout
             return out
-        out.raw = proc.stdout.decode("utf-8", "replace")
+        out.raw = _plain(proc.stdout.decode("utf-8", "replace"))
 
         for verdict, nodeid in _PYTEST_LINE.findall(out.raw):
             key = nodeid.split("[", 1)[0]
@@ -178,7 +196,7 @@ class NodeRunner:
                 timeout=timeout,
                 env=_clean_env(),
             )
-            out.raw = proc.stdout.decode("utf-8", "replace")
+            out.raw = _plain(proc.stdout.decode("utf-8", "replace"))
             try:
                 with open(outfile, "r") as fh:
                     payload = json.load(fh)

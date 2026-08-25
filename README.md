@@ -2,6 +2,10 @@
 
 **Your agent said it's done. `unfaked` checks whether it made that true, or just made the check pass.**
 
+<p align="center">
+  <img src="docs/hero.svg" alt="unfaked reporting that 3 of the 5 tests an agent added still pass with its change reverted" width="100%">
+</p>
+
 A coding agent that cannot finish a task can always finish the *report*. It skips
 the failing test, widens the assertion, wraps the crash in `except: pass`, or adds
 tests that pass no matter what the code does. The suite goes green, the summary
@@ -11,117 +15,36 @@ says "all tests passing", and nothing was fixed.
 dependencies, no API key, no LLM — every check is deterministic, and every
 finding comes with a file, a line, and the command to reproduce it.
 
+## Every finding carries its own evidence
+
+<p align="center">
+  <img src="docs/finding.svg" alt="A finding showing file and line, the offending code, why it is a problem, how to fix it, and the exact command to reproduce it" width="100%">
+</p>
+
+<sub>Both images are generated, not drawn: `python scripts/render_svg.py docs/hero.svg`
+runs `examples/demo.py`, which builds that repository and reports on it. Nothing in
+this README was typed by hand.</sub>
+
+## Run it the moment your agent stops
+
+```jsonc
+// .claude/settings.json
+{ "hooks": { "Stop": [ { "hooks": [
+  { "type": "command", "command": "uvx unfaked -q --exit-zero" }
+] } ] } }
+```
+
+One line when there is nothing to report, the table only when there is. **222 ms**
+on `anthropic-sdk-python`, because the moment right after an agent says it is done
+is not a place anyone waits.
+
+Or let the agent check its own work before it reports back:
+
 ```console
-$ uvx unfaked --deep
+npx skills add cmun2/unfaked
 ```
 
-```
-  unfaked  paginator  ·  HEAD~1..HEAD (e08f6a6)
-  2 files changed  ·  5 tests added  ·  pytest
-
-  ▎ 3 of the 5 tests it added still pass with the change reverted.
-
-  ▲ hollow-tests     tests that cannot fail                                   1 warn
-  ✗ revert-probe     do the new tests notice the change?                      3 fail
-  ▲ neutered-checks  checks switched off                                      2 warn
-  ▲ loose-ends       what the change left behind                              1 warn
-
-  ──────────────────────────────────────────────────────────────────────────────────
-
-  ✗  tests/test_paginator.py:21                                         revert-probe
-     still passes with the change reverted: test_paginate_first_page
-
-          21 │ def test_paginate_first_page():
-          22 │     assert paginate(ITEMS, 4, 0) == [0, 1, 2, 3]
-
-     why  This test passes both with and without the source change, so it does not
-          demonstrate the change did anything.
-     fix  Make the assertion depend on the new behaviour, then confirm it fails on
-          the old code.
-     run  git restore --source=HEAD~1 --worktree -- src/paginator.py &&
-          ./.venv/bin/python -m pytest
-          tests/test_paginator.py::test_paginate_first_page -q --no-header -rA
-          --tb=no -p no:cacheprovider
-
-  ✗  tests/test_paginator.py:25                                         revert-probe
-     still passes with the change reverted: test_page_count_of_an_empty_list
-
-          25 │ def test_page_count_of_an_empty_list():
-          26 │     assert page_count([], 4) == 0
-
-     why  This test passes both with and without the source change, so it does not
-          demonstrate the change did anything.
-     fix  Make the assertion depend on the new behaviour, then confirm it fails on
-          the old code.
-     run  git restore --source=HEAD~1 --worktree -- src/paginator.py &&
-          ./.venv/bin/python -m pytest
-          tests/test_paginator.py::test_page_count_of_an_empty_list -q --no-header
-          -rA --tb=no -p no:cacheprovider
-
-  ✗  tests/test_paginator.py:34                                         revert-probe
-     still passes with the change reverted: test_paginate_smoke
-
-          34 │ def test_paginate_smoke():
-          35 │     paginate(ITEMS, 4, 1)
-
-     why  This test passes both with and without the source change, so it does not
-          demonstrate the change did anything.
-     fix  Make the assertion depend on the new behaviour, then confirm it fails on
-          the old code.
-     run  git restore --source=HEAD~1 --worktree -- src/paginator.py &&
-          ./.venv/bin/python -m pytest tests/test_paginator.py::test_paginate_smoke
-          -q --no-header -rA --tb=no -p no:cacheprovider
-
-  ▲  tests/test_paginator.py:34                                         hollow-tests
-     no assertion in added test: test_paginate_smoke
-
-          34 │ def test_paginate_smoke():
-          35 │     paginate(ITEMS, 4, 1)
-
-     why  It can only fail if something raises, so it is a smoke test, not a check
-          of behaviour.
-     fix  Assert the value the change is supposed to produce, or rename it so
-          nobody counts it as coverage.
-     run  git diff HEAD~1..HEAD -- tests/test_paginator.py
-
-  ▲  notes_to_self.md                                                     loose-ends
-     left uncommitted: notes_to_self.md
-
-          ?? │ notes_to_self.md
-
-     why  This file differs from the commit under review (untracked), so what was
-          reviewed is not what is on disk.
-     fix  `git add notes_to_self.md` if it belongs to the change, or discard it.
-     run  git status --porcelain
-
-  ▲  src/paginator.py:12                                             neutered-checks
-     suppression added: # type: ignore
-
-          12 │     return -(-len(items) // page_size)  # type: ignore
-
-     why  The type error is still there; only the report of it was removed.
-     fix  Narrow the type or fix the call. If it is genuinely unavoidable, pin it:
-          `# type: ignore[code]`.
-     run  git diff HEAD~1..HEAD -- src/paginator.py
-
-  ▲  tests/test_paginator.py:8                                       neutered-checks
-     test disabled: @pytest.mark.skip
-
-           8 │ @pytest.mark.skip(reason="flaky on CI")
-
-     why  A skipped test reports as not-run, but a green suite reads as if it ran.
-     fix  Delete the marker and make the test pass, or say in the reason why it can
-          never run here.
-     run  git diff HEAD~1..HEAD -- tests/test_paginator.py
-
-  ──────────────────────────────────────────────────────────────────────────────────
-  3 fail · 4 warn                                                             exit 1
-```
-
-<sub>Real output. `python examples/demo.py` builds that repository and runs
-`unfaked` on it — nothing in this README was typed by hand.</sub>
-
----
+→ [Claude Code hook](integrations/claude-code-hook.md) · [agent skill](skills/unfaked/SKILL.md) · [PR gate](integrations/github-action.yml)
 
 ## The check that matters
 
@@ -186,30 +109,6 @@ as-is. `--exit-zero` turns that off.
 | `-q` | one line when there is nothing to report (for hooks) |
 | `--exit-zero` | always exit 0 |
 | `--timeout SEC` | cap on each test run (default 600) |
-
-## Run it without remembering to
-
-Typing a command is the part that does not happen. Three ways to remove it,
-in `integrations/`:
-
-**[Claude Code hook](integrations/claude-code-hook.md)** — fires the moment
-the agent stops, before you read its summary. Fast mode, `--exit-zero`, one
-line when clean.
-
-```json
-{ "hooks": { "Stop": [ { "hooks": [
-  { "type": "command", "command": "uvx unfaked -q --exit-zero" }
-] } ] } }
-```
-
-**[Agent skill](integrations/skill/SKILL.md)** — drop into `.claude/skills/`
-and the agent checks its own work before reporting done, including running
-`--deep` on a bug fix. Copy `integrations/skill/` to
-`~/.claude/skills/unfaked/`.
-
-**[GitHub Action](integrations/github-action.yml)** — `--deep` on every pull
-request, which is where a test that proves nothing costs the most. Copy to
-`.github/workflows/`.
 
 ## What it checks
 

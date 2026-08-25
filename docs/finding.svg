@@ -1,0 +1,136 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="766" height="674" viewBox="0 0 766 674" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="14">
+<rect width="766" height="674" rx="10" fill="#0d1117"/>
+<circle cx="22" cy="18" r="6" fill="#ff5f57"/>
+<circle cx="42" cy="18" r="6" fill="#febc2e"/>
+<circle cx="62" cy="18" r="6" fill="#28c840"/>
+<text x="383" y="23" fill="#6e7681" font-size="12" text-anchor="middle">unfaked --deep</text>
+<text x="22.0" y="54.0" xml:space="preserve">
+<tspan x="22.0" fill="#c9d1d9">  </tspan>
+<tspan x="38.8" fill="#c9d1d9" font-weight="bold">unfaked</tspan>
+<tspan x="97.6" fill="#c9d1d9">  </tspan>
+<tspan x="114.4" fill="#39c5cf">paginator</tspan>
+<tspan x="190.0" fill="#6e7681">  ·  HEAD~1..HEAD (cb1ed1e)</tspan>
+</text>
+<text x="22.0" y="74.0" xml:space="preserve">
+<tspan x="22.0" fill="#c9d1d9">  </tspan>
+<tspan x="38.8" fill="#6e7681">2 files changed  ·  5 tests added  ·  pytest</tspan>
+</text>
+<text x="22.0" y="114.0" xml:space="preserve">
+<tspan x="22.0" fill="#c9d1d9">  </tspan>
+<tspan x="38.8" fill="#ff7b72" font-weight="bold">▎</tspan>
+<tspan x="47.2" fill="#c9d1d9"> </tspan>
+<tspan x="55.6" fill="#c9d1d9" font-weight="bold">3 of the 5 tests it added still pass with the change reverted.</tspan>
+</text>
+<text x="22.0" y="154.0" xml:space="preserve">
+<tspan x="22.0" fill="#c9d1d9">  </tspan>
+<tspan x="38.8" fill="#d29922">▲</tspan>
+<tspan x="47.2" fill="#c9d1d9"> </tspan>
+<tspan x="55.6" fill="#c9d1d9" font-weight="bold">hollow-tests   </tspan>
+<tspan x="181.6" fill="#c9d1d9">  </tspan>
+<tspan x="198.4" fill="#6e7681">tests that cannot fail</tspan>
+<tspan x="383.2" fill="#c9d1d9">                                     </tspan>
+<tspan x="694.0" fill="#d29922">1 warn</tspan>
+</text>
+<text x="22.0" y="174.0" xml:space="preserve">
+<tspan x="22.0" fill="#c9d1d9">  </tspan>
+<tspan x="38.8" fill="#ff7b72">✗</tspan>
+<tspan x="47.2" fill="#c9d1d9"> </tspan>
+<tspan x="55.6" fill="#c9d1d9" font-weight="bold">revert-probe   </tspan>
+<tspan x="181.6" fill="#c9d1d9">  </tspan>
+<tspan x="198.4" fill="#6e7681">do the new tests notice the change?</tspan>
+<tspan x="492.4" fill="#c9d1d9">                        </tspan>
+<tspan x="694.0" fill="#ff7b72">3 fail</tspan>
+</text>
+<text x="22.0" y="194.0" xml:space="preserve">
+<tspan x="22.0" fill="#c9d1d9">  </tspan>
+<tspan x="38.8" fill="#d29922">▲</tspan>
+<tspan x="47.2" fill="#c9d1d9"> </tspan>
+<tspan x="55.6" fill="#c9d1d9" font-weight="bold">neutered-checks</tspan>
+<tspan x="181.6" fill="#c9d1d9">  </tspan>
+<tspan x="198.4" fill="#6e7681">checks switched off</tspan>
+<tspan x="358.0" fill="#c9d1d9">                                        </tspan>
+<tspan x="694.0" fill="#d29922">2 warn</tspan>
+</text>
+<text x="22.0" y="214.0" xml:space="preserve">
+<tspan x="22.0" fill="#c9d1d9">  </tspan>
+<tspan x="38.8" fill="#d29922">▲</tspan>
+<tspan x="47.2" fill="#c9d1d9"> </tspan>
+<tspan x="55.6" fill="#c9d1d9" font-weight="bold">loose-ends     </tspan>
+<tspan x="181.6" fill="#c9d1d9">  </tspan>
+<tspan x="198.4" fill="#6e7681">what the change left behind</tspan>
+<tspan x="425.2" fill="#c9d1d9">                                </tspan>
+<tspan x="694.0" fill="#d29922">1 warn</tspan>
+</text>
+<text x="22.0" y="254.0" xml:space="preserve">
+<tspan x="22.0" fill="#c9d1d9">  </tspan>
+<tspan x="38.8" fill="#6e7681">────────────────────────────────────────────────────────────────────────────────────</tspan>
+</text>
+<text x="22.0" y="294.0" xml:space="preserve">
+<tspan x="22.0" fill="#c9d1d9">  </tspan>
+<tspan x="38.8" fill="#ff7b72" font-weight="bold">✗</tspan>
+<tspan x="47.2" fill="#c9d1d9">  </tspan>
+<tspan x="64.0" fill="#39c5cf" font-weight="bold">tests/test_paginator.py:21</tspan>
+<tspan x="282.4" fill="#c9d1d9">                                           </tspan>
+<tspan x="643.6" fill="#6e7681">revert-probe</tspan>
+</text>
+<text x="22.0" y="314.0" xml:space="preserve">
+<tspan x="22.0" fill="#c9d1d9">     </tspan>
+<tspan x="64.0" fill="#c9d1d9" font-weight="bold">still passes with the change reverted: test_paginate_first_page</tspan>
+</text>
+<text x="22.0" y="354.0" xml:space="preserve">
+<tspan x="22.0" fill="#c9d1d9">       </tspan>
+<tspan x="80.8" fill="#6e7681">   21 │ </tspan>
+<tspan x="148.0" fill="#c9d1d9">def test_paginate_first_page():</tspan>
+</text>
+<text x="22.0" y="374.0" xml:space="preserve">
+<tspan x="22.0" fill="#c9d1d9">       </tspan>
+<tspan x="80.8" fill="#6e7681">   22 │ </tspan>
+<tspan x="148.0" fill="#c9d1d9">    assert paginate(ITEMS, 4, 0) == [0, 1, 2, 3]</tspan>
+</text>
+<text x="22.0" y="414.0" xml:space="preserve">
+<tspan x="22.0" fill="#c9d1d9">     </tspan>
+<tspan x="64.0" fill="#6e7681">why</tspan>
+<tspan x="89.2" fill="#c9d1d9">  This test passes both with and without the source change, so it does not</tspan>
+</text>
+<text x="22.0" y="434.0" xml:space="preserve">
+<tspan x="22.0" fill="#c9d1d9">          demonstrate the change did anything.</tspan>
+</text>
+<text x="22.0" y="454.0" xml:space="preserve">
+<tspan x="22.0" fill="#c9d1d9">     </tspan>
+<tspan x="64.0" fill="#6e7681">fix</tspan>
+<tspan x="89.2" fill="#c9d1d9">  Make the assertion depend on the new behaviour, then confirm it fails on</tspan>
+</text>
+<text x="22.0" y="474.0" xml:space="preserve">
+<tspan x="22.0" fill="#c9d1d9">          the old code.</tspan>
+</text>
+<text x="22.0" y="494.0" xml:space="preserve">
+<tspan x="22.0" fill="#c9d1d9">     </tspan>
+<tspan x="64.0" fill="#6e7681">run</tspan>
+<tspan x="89.2" fill="#c9d1d9">  </tspan>
+<tspan x="106.0" fill="#6e7681">git restore --source=HEAD~1 --worktree -- src/paginator.py &amp;&amp;</tspan>
+</text>
+<text x="22.0" y="514.0" xml:space="preserve">
+<tspan x="22.0" fill="#c9d1d9">          </tspan>
+<tspan x="106.0" fill="#6e7681">./.venv/bin/python -m pytest</tspan>
+</text>
+<text x="22.0" y="534.0" xml:space="preserve">
+<tspan x="22.0" fill="#c9d1d9">          </tspan>
+<tspan x="106.0" fill="#6e7681">tests/test_paginator.py::test_paginate_first_page -q --no-header -rA</tspan>
+</text>
+<text x="22.0" y="554.0" xml:space="preserve">
+<tspan x="22.0" fill="#c9d1d9">          </tspan>
+<tspan x="106.0" fill="#6e7681">--tb=no --color=no -p no:cacheprovider</tspan>
+</text>
+<text x="22.0" y="594.0" xml:space="preserve">
+<tspan x="22.0" fill="#c9d1d9">  </tspan>
+<tspan x="38.8" fill="#ff7b72" font-weight="bold">✗</tspan>
+<tspan x="47.2" fill="#c9d1d9">  </tspan>
+<tspan x="64.0" fill="#39c5cf" font-weight="bold">tests/test_paginator.py:25</tspan>
+<tspan x="282.4" fill="#c9d1d9">                                           </tspan>
+<tspan x="643.6" fill="#6e7681">revert-probe</tspan>
+</text>
+<text x="22.0" y="614.0" xml:space="preserve">
+<tspan x="22.0" fill="#c9d1d9">     </tspan>
+<tspan x="64.0" fill="#c9d1d9" font-weight="bold">still passes with the change reverted: test_page_count_of_an_empty_list</tspan>
+</text>
+</svg>
