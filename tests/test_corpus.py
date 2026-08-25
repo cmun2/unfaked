@@ -259,6 +259,19 @@ class TestRevertProbe(unittest.TestCase):
             self.assertEqual([], fails(payload, "revert-probe"))
 
 
+def _build_report(cli, path):
+    """Run the checks the way main() does, but hand back the Report."""
+    args = cli.build_parser().parse_args([path])
+    ctx = cli.Context()
+    ctx.repo = cli.toplevel(path)
+    ctx.head = "HEAD"
+    ctx.base = "HEAD~1"
+    ctx.repo_label = cli.repo_name(ctx.repo)
+    ctx.range_label = "HEAD~1..HEAD (%s)" % cli.short(ctx.repo, "HEAD")
+    import sys as _sys
+    return cli._run_checks(args, ctx, _sys.stdout)
+
+
 class TestFastIsTheDefault(unittest.TestCase):
     """The probe re-runs the suite once per added test, so it is opt-in.
 
@@ -305,6 +318,39 @@ class TestFastIsTheDefault(unittest.TestCase):
             self.assertEqual(1, code)
         finally:
             r.__exit__(None, None, None)
+
+    def test_quiet_collapses_to_one_line_when_there_is_nothing_to_say(self):
+        # The hook integration promises this. A hook that prints a table after
+        # every turn gets muted, and a muted hook reports nothing at all.
+        from unfaked import _render, cli
+
+        with base_repo("mode-quiet-clean") as r:
+            r.write("src/calc.py", SRC_AFTER)
+            r.write(
+                "tests/test_guard.py",
+                "import pytest\n\nfrom src.calc import add\n\n\n"
+                "def test_guard_rejects_none():\n"
+                "    with pytest.raises(ValueError):\n"
+                "        add(None, 1)\n",
+            )
+            r.commit("guard against None, with a test")
+            report = _build_report(cli, r.path)
+            st = _render.Style(False)
+            self.assertEqual(1, len(_render.render(report, st, quiet=True).strip().split("\n")))
+            self.assertGreater(len(_render.render(report, st).strip().split("\n")), 5)
+
+    def test_quiet_still_expands_when_there_is_a_finding(self):
+        from unfaked import _render, cli
+
+        with base_repo("mode-quiet-dirty") as r:
+            r.write("src/calc.py", SRC_AFTER)
+            r.write(
+                "tests/test_guard.py",
+                "from src.calc import add\n\n\ndef test_x():\n    assert add(2, 3) == add(2, 3)\n",
+            )
+            r.commit("guard against None, with a test")
+            out = _render.render(_build_report(cli, r.path), _render.Style(False), quiet=True)
+            self.assertIn("hollow-tests", out)
 
     def test_only_revert_probe_asks_for_it_by_name(self):
         # Naming the check is an explicit request; requiring --deep as well

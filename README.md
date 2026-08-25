@@ -183,6 +183,7 @@ as-is. `--exit-zero` turns that off.
 | `--json` | full report as JSON |
 | `--no-color` | plain text (also honours `NO_COLOR`; auto-off when piped) |
 | `-v` | show INFO findings as well |
+| `-q` | one line when there is nothing to report (for hooks) |
 | `--exit-zero` | always exit 0 |
 | `--timeout SEC` | cap on each test run (default 600) |
 
@@ -197,7 +198,7 @@ line when clean.
 
 ```json
 { "hooks": { "Stop": [ { "hooks": [
-  { "type": "command", "command": "uvx unfaked --exit-zero" }
+  { "type": "command", "command": "uvx unfaked -q --exit-zero" }
 ] } ] } }
 ```
 

@@ -13,7 +13,7 @@ every project):
         "hooks": [
           {
             "type": "command",
-            "command": "uvx unfaked --exit-zero"
+            "command": "uvx unfaked -q --exit-zero"
           }
         ]
       }
@@ -28,7 +28,8 @@ That is the whole integration. Defaults are already what a hook needs:
   `anthropic-sdk-python` and 572ms on a 617-server dataset repo.
 - **`--exit-zero`** — never fails the hook. A verification tool that can kill
   your session is worse than no verification tool.
-- **quiet when clean** — one headline line, nothing else.
+- **`-q`** — one headline line when there is nothing to report. Without it you
+  get the full table after every turn, which is how a hook gets muted.
 - **silent where it does not apply** — not a git repo, or an empty diff, and it
   exits 0 with no output.
 
@@ -38,7 +39,7 @@ That is the whole integration. Defaults are already what a hook needs:
 agent made several commits, point it at where the session started:
 
 ```json
-"command": "uvx unfaked --base $(git rev-parse HEAD@{1}) --exit-zero"
+"command": "uvx unfaked -q --base $(git rev-parse HEAD@{1}) --exit-zero"
 ```
 
 If your agent has not committed at all, there is nothing in the diff to inspect
