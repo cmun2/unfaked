@@ -58,9 +58,9 @@ This is the only way to catch a test that is *shaped* like a real test — real
 assertion, real expected value, real green tick — but asserts something the old
 code already did. A pass count can never see it. Reverting can.
 
-`unfaked` refuses to guess here. If the revert cannot be done cleanly — the tests
-import something the change introduced, a file it would touch is dirty, no runner
-is installed — it says **"revert probe did not run"**, explains why, and reports
+`unfaked` refuses to guess here. If the comparison cannot be made — the tests
+import something the change introduced, no runner is installed, `git worktree` is
+unavailable — it says **"revert probe did not run"**, explains why, and reports
 only what it can defend.
 
 ## Install
@@ -76,13 +76,24 @@ Python 3.9+. No dependencies, ever.
 ## Use
 
 ```console
-unfaked                             # inspect HEAD~1..HEAD in the current repo
-unfaked --deep                      # also re-run the added tests with the change reverted
+unfaked                             # uncommitted work if there is any, else the last commit
+unfaked --deep                      # also run the added tests against the old source
+unfaked --head HEAD                 # a commit range, ignoring the working tree
 unfaked --base main                 # everything since main
-unfaked ../some/repo --base v1.2.0
 unfaked --scope 'src/**'            # flag edits outside the task you gave it
 unfaked --json                      # machine-readable
 ```
+
+An agent does not reliably stop on a commit, so neither does this. What gets
+read is the files on disk whenever they differ from `HEAD`, and the last commit
+when they do not — the header names which, every time. For a whole session,
+record its starting point with `--session-start` and read from there with
+`--session-file`.
+
+**`--deep` never touches the tree it is checking.** The old source is checked out
+into a throwaway `git worktree`, the tests under examination are copied on top,
+and they run there. Uncommitted work is no obstacle, and nothing about the
+original moves.
 
 The default is **fast**: static checks only, no test run, well under a second
 on the repos below. That is deliberate — the moment this is for is the one

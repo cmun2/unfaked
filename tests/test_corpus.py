@@ -4,6 +4,7 @@ Run with:  python -m unittest discover -s tests -v
 """
 
 import os
+import subprocess
 import unittest
 
 from harness import NO_PROBE, Repo, check_status, fails, findings, warns
@@ -262,14 +263,18 @@ class TestRevertProbe(unittest.TestCase):
 
 def _build_report(cli, path):
     """Run the checks the way main() does, but hand back the Report."""
+    from unfaked._changeset import resolve as resolve_changeset
+
     args = cli.build_parser().parse_args([path])
     ctx = cli.Context()
     ctx.repo = cli.toplevel(path)
-    ctx.head = "HEAD"
-    ctx.base = "HEAD~1"
+    ctx.changeset = resolve_changeset(ctx.repo, args.base, args.head, args.session_file)
+    ctx.base = ctx.changeset.base
+    ctx.head = ctx.changeset.head
     ctx.repo_label = cli.repo_name(ctx.repo)
-    ctx.range_label = "HEAD~1..HEAD (%s)" % cli.short(ctx.repo, "HEAD")
+    ctx.range_label = ctx.changeset.label
     import sys as _sys
+
     return cli._run_checks(args, ctx, _sys.stdout)
 
 
@@ -334,6 +339,85 @@ class TestExpectationMovedToTheCode(unittest.TestCase):
             hits = [f for f in findings(payload, "neutered-checks")
                     if "expected value changed" in f["title"]]
             self.assertEqual([], hits, payload["checks"])
+
+
+class TestProbeLeavesTheTreeAlone(unittest.TestCase):
+    """The checker must not be the one thing in the room that mutates the repo.
+
+    It also has to work while the tree is dirty, which is the normal state when
+    an agent has just stopped.
+    """
+
+    def setUp(self):
+        try:
+            import pytest  # noqa: F401
+        except ImportError:  # pragma: no cover
+            self.skipTest("pytest is not installed; the probe cannot run")
+
+    def _status(self, path):
+        out = subprocess.run(
+            ["git", "-C", path, "status", "--porcelain"], capture_output=True
+        ).stdout.decode()
+        return sorted(l for l in out.splitlines() if "__pycache__" not in l)
+
+    def test_runs_with_uncommitted_changes_and_changes_nothing(self):
+        with base_repo("shadow-dirty") as r:
+            # The agent worked and stopped without committing.
+            r.write("src/calc.py", SRC_AFTER)
+            r.write(
+                "tests/test_guard.py",
+                "from src.calc import add\n\n\ndef test_guard():\n    assert add(2, 3) == 5\n",
+            )
+            before = self._status(r.path)
+            payload, code = r.run("--deep")
+
+            self.assertTrue(payload["includes_uncommitted"])
+            # The probe reached a verdict rather than refusing on a dirty tree.
+            self.assertEqual(1, len(fails(payload, "revert-probe")), payload["checks"])
+            self.assertEqual(1, code)
+            self.assertEqual(before, self._status(r.path))
+
+    def test_leaves_no_worktree_behind(self):
+        with base_repo("shadow-cleanup") as r:
+            r.write("src/calc.py", SRC_AFTER)
+            r.write(
+                "tests/test_guard.py",
+                "from src.calc import add\n\n\ndef test_guard():\n    assert add(2, 3) == 5\n",
+            )
+            r.run("--deep")
+            out = subprocess.run(
+                ["git", "-C", r.path, "worktree", "list"], capture_output=True
+            ).stdout.decode()
+            self.assertEqual(1, len([l for l in out.splitlines() if l.strip()]), out)
+
+
+class TestSaysWhichChangeSetItRead(unittest.TestCase):
+    def test_points_at_the_commit_when_the_tree_carries_no_tests(self):
+        # The agent committed its work and left a scratch file. Rather than
+        # guessing which was meant, say what was read and how to ask for the
+        # other.
+        with base_repo("hint-commit") as r:
+            r.write("src/calc.py", SRC_AFTER)
+            r.write(
+                "tests/test_guard.py",
+                "from src.calc import add\n\n\ndef test_guard():\n    assert add(2, 3) == 5\n",
+            )
+            r.commit("guard against None, with a test")
+            r.write("notes.md", "TODO\n")
+            payload, _ = r.run(*NO_PROBE)
+
+            self.assertEqual("working-tree", payload["changeset"])
+            self.assertIn("--head HEAD", payload["hint"])
+
+    def test_no_hint_when_the_tree_is_the_whole_story(self):
+        with base_repo("hint-none") as r:
+            r.write("src/calc.py", SRC_AFTER)
+            r.write(
+                "tests/test_guard.py",
+                "from src.calc import add\n\n\ndef test_guard():\n    assert add(2, 3) == 5\n",
+            )
+            payload, _ = r.run(*NO_PROBE)
+            self.assertEqual("", payload.get("hint", ""))
 
 
 class TestProbeSurvivesForcedColour(unittest.TestCase):
@@ -741,13 +825,29 @@ class TestNeuteredWeakenedAssertions(unittest.TestCase):
 
 class TestTracesUncommitted(unittest.TestCase):
     def test_caught(self):
+        # Reviewing a commit: a file on disk that is not in it means what was
+        # reviewed is not what is there. Asking for a commit range explicitly,
+        # since the default would take the working tree as the subject instead.
         with base_repo("c1-catch") as r:
             r.write("src/calc.py", SRC_AFTER)
             r.commit("guard")
             r.write("src/scratch.py", "# left behind by the agent\n")
-            payload, _ = r.run(*NO_PROBE)
+            payload, _ = r.run("--head", "HEAD", *NO_PROBE)
             titles = [f["title"] for f in warns(payload, "loose-ends")]
             self.assertTrue(any("scratch.py" in t for t in titles), titles)
+
+    def test_not_reported_when_it_is_the_subject(self):
+        # With no --head the working tree is what is inspected, so the same file
+        # is the change rather than something left beside it.
+        with base_repo("c1-subject") as r:
+            r.write("src/calc.py", SRC_AFTER)
+            r.commit("guard")
+            r.write("src/scratch.py", "# the agent stopped without committing\n")
+            payload, _ = r.run(*NO_PROBE)
+            titles = [f["title"] for f in findings(payload, "loose-ends")]
+            self.assertFalse(any("scratch.py" in t for t in titles), titles)
+            self.assertTrue(payload["includes_uncommitted"])
+            self.assertEqual("working-tree", payload["changeset"])
 
     def test_control(self):
         with base_repo("c1-control") as r:

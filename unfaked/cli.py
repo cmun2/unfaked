@@ -10,6 +10,7 @@ from . import __version__
 from . import _check_hollow, _check_neutered, _check_traces, _probe
 from ._finding import FAIL, INFO, WARN, CheckResult
 from ._git import (
+    WORKTREE,
     GitError,
     commit_messages,
     diff_files,
@@ -33,6 +34,7 @@ from ._lang import (
     is_test_file,
     language,
 )
+from ._changeset import ChangeSet, resolve as resolve_changeset, write_session
 from ._render import Report, Style, color_enabled, headline, render
 
 CHECKS = [
@@ -72,6 +74,8 @@ class Context:
         self.range_label = ""
         self.base = ""
         self.head = ""
+        self.changeset: Optional[ChangeSet] = None
+        self.hint = ""
         self.file_count = 0
         self.added_test_count = 0
         self.runner_label = ""
@@ -103,7 +107,20 @@ def build_parser() -> argparse.ArgumentParser:
     )
     p.add_argument("path", nargs="?", default=".", help="repository to inspect (default: .)")
     p.add_argument("--base", help="compare against this ref (default: HEAD~1)")
-    p.add_argument("--head", default="HEAD", help="the reviewed revision (default: HEAD)")
+    p.add_argument(
+        "--head",
+        help="inspect a commit range ending here, ignoring the working tree",
+    )
+    p.add_argument(
+        "--session-file",
+        metavar="PATH",
+        help="inspect everything since the revision recorded in PATH",
+    )
+    p.add_argument(
+        "--session-start",
+        metavar="PATH",
+        help="record the current revision in PATH and exit; pair with --session-file",
+    )
     p.add_argument(
         "--scope",
         action="append",
@@ -176,14 +193,16 @@ def _collect_added_tests(repo: str, head: str, diffs, sources: Dict[str, str]) -
 
 def _run_checks(args, ctx: Context, out_stream) -> Report:
     repo = ctx.repo
-    diffs = [fd for fd in diff_files(repo, ctx.base, ctx.head)]
+    changeset = ctx.changeset
+    assert changeset is not None
+    diffs = list(changeset.diffs())
     ctx.file_count = len(diffs)
 
     sources: Dict[str, str] = {}
     for fd in diffs:
         if fd.binary or fd.status == "D":
             continue
-        src = show_file(repo, ctx.head, fd.path)
+        src = changeset.read(fd.path)
         if src is not None:
             sources[fd.path] = src
 
@@ -197,7 +216,7 @@ def _run_checks(args, ctx: Context, out_stream) -> Report:
             unsupported.add(_CODE_EXT[ext])
     ctx.unsupported_langs = sorted(unsupported)
 
-    evidence = "git diff %s..%s" % (ctx.base, ctx.head)
+    evidence = changeset.evidence
 
     results: List[CheckResult] = []
 
@@ -253,8 +272,8 @@ def _run_checks(args, ctx: Context, out_stream) -> Report:
             _check_traces.run(
                 repo,
                 diffs,
-                porcelain_status(repo),
-                commit_messages(repo, ctx.base, ctx.head),
+                [] if changeset.includes_uncommitted else porcelain_status(repo),
+                changeset.messages(),
                 args.scope or None,
                 evidence,
             )
@@ -267,6 +286,21 @@ def _run_checks(args, ctx: Context, out_stream) -> Report:
         for f in res.findings:
             if f.command == evidence and f.file:
                 f.command = "%s -- %s" % (evidence, f.file)
+
+    # A working tree that carries no tests, while the last commit does, is the
+    # shape of "the agent committed and then left a file behind". Rather than
+    # guessing which one was meant, say which was read and how to ask for the
+    # other.
+    if changeset.includes_uncommitted and not added_tests:
+        try:
+            committed = ChangeSet(repo, "HEAD~1", "HEAD", "commit-range")
+            if any(is_test_file(fd.path) for fd in committed.diffs()):
+                ctx.hint = (
+                    "the working tree was read, and it adds no tests; the last commit does "
+                    "-- `unfaked --head HEAD` reads that instead"
+                )
+        except GitError:
+            pass
 
     order = {n: i for i, (n, _) in enumerate(CHECKS)}
     results.sort(key=lambda r: order.get(r.name, 99))
@@ -312,6 +346,15 @@ def _deferred(name: str, title: str, has_tests: bool) -> CheckResult:
 def main(argv: Optional[List[str]] = None) -> int:
     args = build_parser().parse_args(argv)
 
+    if args.session_start:
+        try:
+            head = write_session(toplevel(os.path.abspath(args.path)), args.session_start)
+        except (GitError, OSError) as exc:
+            sys.stderr.write("unfaked: %s\n" % exc)
+            return 2
+        sys.stderr.write("unfaked: session starts at %s\n" % head[:12])
+        return 0
+
     if args.list_checks:
         for n, t in CHECKS:
             print("%-16s %s" % (n, t))
@@ -334,25 +377,19 @@ def main(argv: Optional[List[str]] = None) -> int:
     ctx.verbose = args.verbose
     try:
         ctx.repo = toplevel(os.path.abspath(args.path))
-        ctx.head = args.head
-        if args.base:
-            ctx.base = args.base
-        else:
-            if not has_parent(ctx.repo, args.head):
-                sys.stderr.write(
-                    "unfaked: %s has no parent commit; pass --base <ref> to pick a range.\n"
-                    % args.head
-                )
-                return 2
-            ctx.base = "%s~1" % args.head
-        rev_parse(ctx.repo, ctx.base)
-        rev_parse(ctx.repo, ctx.head)
+        changeset = resolve_changeset(ctx.repo, args.base, args.head, args.session_file)
+        rev_parse(ctx.repo, changeset.base)
+        if changeset.head != WORKTREE:
+            rev_parse(ctx.repo, changeset.head)
     except GitError as exc:
         sys.stderr.write("unfaked: %s\n" % exc)
         return 2
 
+    ctx.changeset = changeset
+    ctx.base = changeset.base
+    ctx.head = changeset.head
     ctx.repo_label = repo_name(ctx.repo)
-    ctx.range_label = "%s..%s (%s)" % (ctx.base, ctx.head, short(ctx.repo, ctx.head))
+    ctx.range_label = changeset.label
 
     try:
         report = _run_checks(args, ctx, sys.stdout)
@@ -364,9 +401,12 @@ def main(argv: Optional[List[str]] = None) -> int:
         payload = {
             "version": __version__,
             "repo": ctx.repo,
-            "base": rev_parse(ctx.repo, ctx.base),
-            "head": rev_parse(ctx.repo, ctx.head),
-            "range": "%s..%s" % (ctx.base, ctx.head),
+            "base": changeset.resolved()[0],
+            "head": changeset.resolved()[1],
+            "range": changeset.label,
+            "changeset": changeset.kind,
+            "includes_uncommitted": changeset.includes_uncommitted,
+            "hint": ctx.hint,
             "headline": headline(report),
             "files_changed": ctx.file_count,
             "tests_added": ctx.added_test_count,

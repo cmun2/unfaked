@@ -9,11 +9,9 @@ puts them back -- so it refuses to start unless the tree is clean, and it
 restores on every exit path including Ctrl-C.
 """
 
-import atexit
 import json
 import os
 import re
-import signal
 import subprocess
 import sys
 import tempfile
@@ -21,7 +19,8 @@ from typing import Dict, List, Optional, Sequence, Tuple
 
 from ._finding import FAIL, INFO, CheckResult, Finding
 from ._git import GitError, git, rev_parse
-from ._lang import JSTS, PYTHON, TestFn
+from ._shadow import shadow_workspace
+from ._lang import JSTS, PYTHON, TestFn, is_test_file
 
 NAME = "revert-probe"
 TITLE = "do the new tests notice the change?"
@@ -106,10 +105,17 @@ class PytestRunner:
     kind = PYTHON
     label = "pytest"
 
-    def __init__(self, repo: str, python: str, extra: Sequence[str] = ()) -> None:
+    def __init__(
+        self, repo: str, python: str, extra: Sequence[str] = (), cwd: Optional[str] = None
+    ) -> None:
         self.repo = repo
         self.python = python
         self.extra = list(extra)
+        # Where the tests run. The interpreter stays where it was found.
+        self.cwd = cwd or repo
+
+    def in_directory(self, path: str) -> "PytestRunner":
+        return PytestRunner(self.repo, self.python, self.extra, cwd=path)
 
     @property
     def _shown_python(self) -> str:
@@ -132,7 +138,7 @@ class PytestRunner:
         try:
             proc = subprocess.run(
                 cmd,
-                cwd=self.repo,
+                cwd=self.cwd,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.STDOUT,
                 timeout=timeout,
@@ -169,10 +175,14 @@ class PytestRunner:
 class NodeRunner:
     kind = JSTS
 
-    def __init__(self, repo: str, bin_path: str, label: str) -> None:
+    def __init__(self, repo: str, bin_path: str, label: str, cwd: Optional[str] = None) -> None:
         self.repo = repo
         self.bin = bin_path
         self.label = label
+        self.cwd = cwd or repo
+
+    def in_directory(self, path: str) -> "NodeRunner":
+        return NodeRunner(self.repo, self.bin, self.label, cwd=path)
 
     def command_for(self, tests: List[TestFn], outfile: str = "<report.json>") -> List[str]:
         files = sorted({t.path for t in tests})
@@ -190,7 +200,7 @@ class NodeRunner:
         try:
             proc = subprocess.run(
                 cmd,
-                cwd=self.repo,
+                cwd=self.cwd,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.STDOUT,
                 timeout=timeout,
@@ -280,54 +290,6 @@ def _key_for(t: TestFn) -> str:
     return _norm(t.qualname.replace(" > ", " "))
 
 
-class _Restorer:
-    """Puts the working tree back, whatever happens."""
-
-    def __init__(self, repo: str, paths: List[str]) -> None:
-        self.repo = repo
-        self.paths = paths
-        self.armed = False
-        self._prev_handlers = {}
-
-    def arm(self) -> None:
-        self.armed = True
-        atexit.register(self.restore)
-        for sig in (signal.SIGINT, signal.SIGTERM):
-            try:
-                self._prev_handlers[sig] = signal.signal(sig, self._on_signal)
-            except (ValueError, OSError):  # pragma: no cover - non-main thread
-                pass
-
-    def _on_signal(self, signum, frame):  # pragma: no cover - interactive only
-        self.restore()
-        sys.stderr.write("\nunfaked: working tree restored after signal %d\n" % signum)
-        raise SystemExit(130)
-
-    def restore(self) -> None:
-        if not self.armed:
-            return
-        self.armed = False
-        for attempt in (
-            ("restore", "--source=HEAD", "--worktree", "--staged", "--"),
-            ("checkout", "HEAD", "--"),
-        ):
-            try:
-                git(self.repo, *(list(attempt) + self.paths))
-                break
-            except GitError:
-                continue
-        else:
-            sys.stderr.write(
-                "unfaked: FAILED to restore %s -- run `git checkout HEAD -- %s`\n"
-                % (", ".join(self.paths), " ".join(self.paths))
-            )
-        for sig, handler in self._prev_handlers.items():
-            try:
-                signal.signal(sig, handler)
-            except (ValueError, OSError):  # pragma: no cover
-                pass
-
-
 def run(
     repo: str,
     base: str,
@@ -376,18 +338,6 @@ def run(
             "the change touched no non-test source files, so there is nothing to revert",
             "A test-only change cannot be probed this way.",
         )
-    collide = sorted(set(dirty_paths) & set(source_paths))
-    if collide:
-        return inconclusive(
-            "these files have uncommitted changes and the probe would have to overwrite them: %s"
-            % ", ".join(collide),
-            "Commit or stash them, then re-run. `--skip revert-probe` turns this off.",
-        )
-    if rev_parse(repo, "HEAD") != rev_parse(repo, head):
-        return inconclusive(
-            "HEAD is not %s; the probe runs the tests as they exist in the working tree" % head,
-            "Check out %s and re-run." % head,
-        )
 
     runners, notes = detect_runners(repo, added_tests)
     if not runners:
@@ -428,68 +378,57 @@ def run(
             "Make the suite green first: %s" % (baseline_cmds[0] if baseline_cmds else ""),
         )
 
-    # 2. revert the source, keep the tests -----------------------------------
-    restorer = _Restorer(repo, source_paths)
+    # 2. run the same tests against the old source, elsewhere ---------------
     reverted: Dict[str, str] = {}
     reverted_cases: Dict[str, str] = {}
     revert_cmds: List[str] = []
-    added_in_head = [p for p in source_paths if source_status.get(p) == "A"]
-    checkout_paths = [p for p in source_paths if source_status.get(p) != "A"]
+    revert_cmd_display = "git worktree add --detach <tmp> %s" % base
 
-    revert_cmd_display = (
-        "git restore --source=%s --worktree -- %s" % (base, " ".join(checkout_paths))
-        if checkout_paths
-        else ""
-    )
-    if added_in_head:
-        revert_cmd_display = (
-            (revert_cmd_display + " && " if revert_cmd_display else "")
-            + "rm " + " ".join(added_in_head)
-        )
+    test_files = {
+        path: text
+        for path, text in sources.items()
+        if is_test_file(path) and text is not None
+    }
 
     try:
-        restorer.arm()
-        if checkout_paths:
-            try:
-                git(repo, "restore", "--source=%s" % base, "--worktree", "--", *checkout_paths)
-            except GitError:
-                git(repo, "checkout", base, "--", *checkout_paths)
-        for p in added_in_head:
-            try:
-                os.unlink(os.path.join(repo, p))
-            except OSError:
-                pass
+        with shadow_workspace(repo, base) as shadow:
+            # The baseline's own test files are replaced by the ones under
+            # examination; everything else stays as `base` had it, which is the
+            # whole point of the comparison.
+            shadow.lay_over(test_files)
+            shadow.link_tooling()
 
-        by_kind_pass: Dict[str, List[TestFn]] = {}
-        for t in passing_now:
-            by_kind_pass.setdefault(t.kind, []).append(t)
-        for kind, tests in by_kind_pass.items():
-            outcome = runners[kind].run(tests, timeout)
-            revert_cmds.append(outcome.command)
-            if not outcome.ok:
-                res.status = "inconclusive"
-                res.note = (
-                    "with the change reverted the suite could not run (%s) -- most likely the "
-                    "tests import something the change introduced, so this repo cannot be probed "
-                    "by reverting alone" % outcome.reason
-                )
-                res.add(
-                    Finding(
-                        NAME, INFO, "revert probe inconclusive", None, None,
-                        [ln for ln in outcome.raw.strip().split("\n")[-6:] if ln.strip()],
-                        why=res.note,
-                        fix="Split source and test changes into separate commits, or review these tests by hand.",
-                        command="%s && %s" % (revert_cmd_display, outcome.command),
-                        extra={"kind": "inconclusive"},
+            by_kind_pass: Dict[str, List[TestFn]] = {}
+            for t in passing_now:
+                by_kind_pass.setdefault(t.kind, []).append(t)
+            for kind, tests in by_kind_pass.items():
+                outcome = runners[kind].in_directory(shadow.path).run(tests, timeout)
+                revert_cmds.append(outcome.command)
+                if not outcome.ok:
+                    res.status = "inconclusive"
+                    res.note = (
+                        "against the old source the suite could not run (%s) -- most likely the "
+                        "tests import something the change introduced, so this repo cannot be "
+                        "probed by reverting alone" % outcome.reason
                     )
-                )
-                return res
-            reverted.update(outcome.results)
-            reverted_cases.update(outcome.cases)
+                    res.add(
+                        Finding(
+                            NAME, INFO, "revert probe inconclusive", None, None,
+                            [ln for ln in outcome.raw.strip().split("\n")[-6:] if ln.strip()],
+                            why=res.note,
+                            fix="Split source and test changes into separate commits, or review these tests by hand.",
+                            command=outcome.command,
+                            extra={"kind": "inconclusive"},
+                        )
+                    )
+                    return res
+                reverted.update(outcome.results)
+                reverted_cases.update(outcome.cases)
     except GitError as exc:
-        return inconclusive("could not revert the source files: %s" % exc)
-    finally:
-        restorer.restore()
+        return inconclusive(
+            "could not prepare an isolated checkout of %s: %s" % (base, exc),
+            "The probe needs `git worktree`; the working tree itself is never modified.",
+        )
 
     # 3. verdict -------------------------------------------------------------
     survivors = []

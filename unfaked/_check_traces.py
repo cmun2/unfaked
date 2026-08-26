@@ -55,6 +55,8 @@ def run(
     res = CheckResult(NAME, TITLE)
 
     # --- uncommitted work -------------------------------------------------
+    # Empty when the change set already covers the working tree: those files are
+    # what is being inspected, not something left beside it.
     interesting = [
         (xy, path)
         for xy, path in dirty

@@ -202,7 +202,10 @@ def main():
     # --deep, because the point of the demo is the revert probe. The fast
     # default would report it as `not run`, which is the honest thing for a
     # hook to say and the wrong thing for a demo to show.
-    argv = [path, "--deep"]
+    # `--head HEAD` because the demo is a commit an agent produced. Without it
+    # the default would read the uncommitted scratch file instead, which is the
+    # right call for a session that never committed but not what this shows.
+    argv = [path, "--deep", "--head", "HEAD"]
     if args.no_color:
         argv.append("--no-color")
 

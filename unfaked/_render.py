@@ -226,6 +226,11 @@ def render(report: Report, st: Style, w: Optional[int] = None, quiet: bool = Fal
         L.append(pad + paint(bar) + " " + (st.bold(line) if i == 0 else line))
     L.append("")
 
+    if getattr(ctx, "hint", ""):
+        for line in _wrap(ctx.hint, inner - 2):
+            L.append(pad + st.grey("  " + line))
+        L.append("")
+
     # --- per-check summary ------------------------------------------------
     name_w = max([len(c.name) for c in report.checks] + [12])
     for c in report.checks:

@@ -233,6 +233,48 @@ def parse_diff(text: str) -> List[FileDiff]:
     return files
 
 
+WORKTREE = "<worktree>"
+"""Stand-in for a revision, meaning the files as they are on disk right now."""
+
+
+def diff_worktree(repo: str, base: str, context: int = 0) -> List[FileDiff]:
+    """`base` against the working tree, untracked files included.
+
+    An agent that has not committed still changed something, and a new test file
+    it has not staged is exactly the thing worth looking at. `git diff` alone
+    never mentions those, so they are added here as whole-file additions.
+    """
+    tracked = parse_diff(
+        git(
+            repo,
+            "diff",
+            "-U%d" % context,
+            "--no-color",
+            "--no-ext-diff",
+            "--find-renames",
+            base,
+        )
+    )
+    seen = {fd.path for fd in tracked}
+    untracked = []
+    for xy, path in porcelain_status(repo):
+        if xy != "??" or path in seen or path.endswith("/"):
+            continue
+        full = os.path.join(repo, path)
+        try:
+            with open(full, "r", encoding="utf-8") as fh:
+                text = fh.read()
+        except (OSError, UnicodeDecodeError):
+            continue
+        fd = FileDiff(path, None, "A")
+        hunk = Hunk(0, 1)
+        for i, line in enumerate(text.split("\n"), start=1):
+            hunk.lines.append(("+", None, i, line))
+        fd.hunks.append(hunk)
+        untracked.append(fd)
+    return tracked + untracked
+
+
 def diff_files(repo: str, base: str, head: str, context: int = 0) -> List[FileDiff]:
     text = git(
         repo,

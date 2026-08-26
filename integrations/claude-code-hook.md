@@ -35,15 +35,26 @@ That is the whole integration. Defaults are already what a hook needs:
 
 ## Reviewing the whole session, not the last commit
 
-`Stop` fires once per turn, and the default range is `HEAD~1..HEAD`. If your
-agent made several commits, point it at where the session started:
+An agent does not reliably finish on a commit. The usual shape is edit, edit,
+run tests, edit, "done" — so record where the session started and read
+everything since:
 
 ```json
-"command": "uvx unfaked -q --base $(git rev-parse HEAD@{1}) --exit-zero"
+{
+  "hooks": {
+    "SessionStart": [ { "hooks": [
+      { "type": "command", "command": "uvx unfaked --session-start .git/unfaked-session.json" }
+    ] } ],
+    "Stop": [ { "hooks": [
+      { "type": "command", "command": "uvx unfaked -q --session-file .git/unfaked-session.json --exit-zero" }
+    ] } ]
+  }
+}
 ```
 
-If your agent has not committed at all, there is nothing in the diff to inspect
-— `loose-ends` will say so.
+Without the pair, the default still covers the common case: if the working tree
+differs from `HEAD` those changes are what gets read, and if it is clean the last
+commit is. The header always names which of the two it was.
 
 ## Adding the probe back
 

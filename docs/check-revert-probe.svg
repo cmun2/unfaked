@@ -1,9 +1,9 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="699" height="304" viewBox="0 0 699 304" role="img" font-family="ui-monospace,SFMono-Regular,'SF Mono',Menlo,Consolas,'Liberation Mono',monospace" font-size="13">
+<svg xmlns="http://www.w3.org/2000/svg" width="699" height="285" viewBox="0 0 699 285" role="img" font-family="ui-monospace,SFMono-Regular,'SF Mono',Menlo,Consolas,'Liberation Mono',monospace" font-size="13">
 <style>
   text { dominant-baseline: middle; }
 
 </style>
-<rect x="0.5" y="0.5" width="698" height="303" rx="12"
+<rect x="0.5" y="0.5" width="698" height="284" rx="12"
       fill="#0d1117" stroke="#30363d"/>
 <path d="M0.5 12.5a12 12 0 0 1 12-12h674a12 12 0 0 1 12 12v24h-698z"
       fill="#161b22"/>
@@ -21,8 +21,7 @@
 <text y="147.0" xml:space="preserve"><tspan x="26.0" fill="#c9d1d9">          demonstrate the change did anything.</tspan></text>
 <text y="166.0" xml:space="preserve"><tspan x="26.0" fill="#c9d1d9">     fix  Make the assertion depend on the new behaviour, then confirm it fails on</tspan></text>
 <text y="185.0" xml:space="preserve"><tspan x="26.0" fill="#c9d1d9">          the old code.</tspan></text>
-<text y="204.0" xml:space="preserve"><tspan x="26.0" fill="#c9d1d9">     run  git restore --source=HEAD~1 --worktree -- src/paginator.py &amp;&amp;</tspan></text>
-<text y="223.0" xml:space="preserve"><tspan x="26.0" fill="#c9d1d9">          ./.venv/bin/python -m pytest</tspan></text>
-<text y="242.0" xml:space="preserve"><tspan x="26.0" fill="#c9d1d9">          tests/test_paginator.py::test_paginate_first_page -q --no-header -rA</tspan></text>
-<text y="261.0" xml:space="preserve"><tspan x="26.0" fill="#c9d1d9">          --tb=no --color=no -p no:cacheprovider</tspan></text>
+<text y="204.0" xml:space="preserve"><tspan x="26.0" fill="#c9d1d9">     run  git worktree add --detach &lt;tmp&gt; HEAD~1 &amp;&amp; ./.venv/bin/python -m pytest</tspan></text>
+<text y="223.0" xml:space="preserve"><tspan x="26.0" fill="#c9d1d9">          tests/test_paginator.py::test_paginate_first_page -q --no-header -rA</tspan></text>
+<text y="242.0" xml:space="preserve"><tspan x="26.0" fill="#c9d1d9">          --tb=no --color=no -p no:cacheprovider</tspan></text>
 </svg>
