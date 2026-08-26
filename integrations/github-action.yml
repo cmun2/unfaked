@@ -14,12 +14,12 @@ jobs:
   unfaked:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           # --base needs the merge-base, so the default depth-1 clone is not enough
           fetch-depth: 0
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
 
@@ -43,7 +43,7 @@ jobs:
           uvx unfaked \
             --base "origin/${{ github.base_ref }}" \
             --deep --json --exit-zero > unfaked.json
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: always()
         with:
           name: unfaked-report
