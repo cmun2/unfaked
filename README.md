@@ -388,12 +388,18 @@ plant. One number matters in each direction:
 fixtures — 14 generated repositories, probe included
   caught 10/10 · false alarms 0/4 controls
 
-history — 12 real commits of this repository, probe included
+history — 14 real commits of this repository, probe included
   false-positive FAILs   0   (static checks only)
-  added tests            7 of 12 commits
-  probe reached a verdict 6 of 7 (86%)
+  probe reached a verdict 7 of 8 (88%)
   added tests that do not distinguish their change   7
 ```
+
+The fixtures are generated, so those numbers are fixed. The history numbers
+move as this repository gains commits; the ones above are from `4e3d08f`, run
+on a clean CI machine rather than quoted from a laptop. CI runs both corpora on
+every change and fails the build if a planted problem is missed, a control is
+flagged, or a static check fires on real work — so the two zeros are enforced
+rather than reported.
 
 That last line is not an error rate, and it is the most interesting number
 here. Seven tests written for this repository pass whether or not the change

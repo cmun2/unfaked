@@ -73,6 +73,15 @@ jobs:
           numbers = json.load(open("benchmark.json"))
           fixtures, history = numbers["fixtures"], numbers["history"]
           problems = []
+          # An empty corpus satisfies every comparison below, so a benchmark
+          # that silently stopped building repositories would pass this gate
+          # while measuring nothing.
+          if fixtures["expected"] < 10 or fixtures["controls"] < 4:
+              problems.append(
+                  "fixtures: corpus shrank to %(expected)d planted, %(controls)d controls" % fixtures
+              )
+          if history["commits"] < 5:
+              problems.append("history: only %d commits read" % history["commits"])
           if fixtures["caught"] != fixtures["expected"]:
               problems.append("fixtures: caught %(caught)d of %(expected)d" % fixtures)
           if fixtures["false_alarms"]:
