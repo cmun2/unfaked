@@ -2,6 +2,11 @@
 
 **Your agent said it's done. `unfaked` checks whether it made that true, or just made the check pass.**
 
+[![PyPI](https://img.shields.io/pypi/v/unfaked)](https://pypi.org/project/unfaked/)
+[![Python](https://img.shields.io/pypi/pyversions/unfaked)](https://pypi.org/project/unfaked/)
+[![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
+[![Dependencies](https://img.shields.io/badge/dependencies-0-brightgreen)](pyproject.toml)
+
 <p align="center">
   <img src="docs/demo.svg" alt="An agent commit claiming comprehensive tests, then unfaked reporting that 3 of the 5 tests it added still pass with the change reverted" width="100%">
 </p>
@@ -67,9 +72,6 @@ pip install unfaked
 ```
 
 Python 3.9+. No dependencies, ever.
-
-> Not on PyPI yet, so those three lines do not work at this commit. Until then:
-> `git clone` and run `python -m unfaked`, or `pipx install .` from the clone.
 
 ## Use
 
