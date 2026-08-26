@@ -6,6 +6,10 @@
   <img src="docs/demo.svg" alt="An agent commit claiming comprehensive tests, then unfaked reporting that 3 of the 5 tests it added still pass with the change reverted" width="100%">
 </p>
 
+<sub>Generated from a real `unfaked` run, not a hand-written mockup:
+`python scripts/render_svg.py` executes `examples/demo.py` and draws its output
+verbatim, so the images here cannot drift from the tool.</sub>
+
 A coding agent that cannot finish a task can always finish the *report*. It skips
 the failing test, widens the assertion, wraps the crash in `except: pass`, or adds
 tests that pass no matter what the code does. The suite goes green, the summary
@@ -42,7 +46,8 @@ Static patterns catch the careless fakes. The **revert probe** catches the ones
 that look fine:
 
 > Put the source back the way it was, keep the tests the agent added, and run
-> them. Every test that still passes did not test the change.
+> them. A test that passes both ways does not distinguish the change from
+> the baseline.
 
 This is the only way to catch a test that is *shaped* like a real test — real
 assertion, real expected value, real green tick — but asserts something the old
@@ -104,9 +109,14 @@ as-is. `--exit-zero` turns that off.
 
 ### `hollow-tests` — tests that cannot fail
 
+<details>
+<summary>What it looks like</summary>
+
 <p align="center">
   <img src="docs/check-hollow-tests.svg" alt="A test with no assertion, reported with its file, line, the code, why it is a problem and how to fix it" width="100%">
 </p>
+
+</details>
 
 | | |
 |---|---|
@@ -131,9 +141,14 @@ for, are listed as INFO — they are not evidence either way.
 
 ### `neutered-checks` — checks switched off instead of satisfied
 
+<details>
+<summary>What it looks like</summary>
+
 <p align="center">
   <img src="docs/check-neutered-checks.svg" alt="A type-ignore comment added instead of the type error being fixed" width="100%">
 </p>
+
+</details>
 
 Anchored to lines the diff **added**, so a suppression that predates the change is
 never reported.
@@ -149,9 +164,14 @@ never reported.
 
 ### `loose-ends` — what the change left behind
 
+<details>
+<summary>What it looks like</summary>
+
 <p align="center">
   <img src="docs/check-loose-ends.svg" alt="A file left uncommitted, so what was reviewed is not what is on disk" width="100%">
 </p>
+
+</details>
 
 | | |
 |---|---|
