@@ -147,6 +147,13 @@ def build_parser() -> argparse.ArgumentParser:
         help="also revert the change and re-run the added tests",
     )
     p.add_argument("--json", action="store_true", help="machine-readable output")
+    p.add_argument(
+        "--json-file",
+        metavar="PATH",
+        # So one probe run can produce both. CI wants the readable report in the
+        # log and the payload as an artifact, and the probe is the expensive part.
+        help="also write the JSON payload here, keeping the report on stdout",
+    )
     p.add_argument("--no-color", action="store_true", help="disable ANSI colour")
     p.add_argument("--exit-zero", action="store_true", help="always exit 0")
     p.add_argument("-v", "--verbose", action="store_true", help="show INFO findings too")
@@ -397,7 +404,7 @@ def main(argv: Optional[List[str]] = None) -> int:
         sys.stderr.write("unfaked: %s\n" % exc)
         return 2
 
-    if args.json:
+    if args.json or args.json_file:
         payload = {
             "version": __version__,
             "repo": ctx.repo,
@@ -420,9 +427,19 @@ def main(argv: Optional[List[str]] = None) -> int:
             "exit_code": 0 if args.exit_zero else report.exit_code,
             "checks": [c.to_dict() for c in report.checks],
         }
-        json.dump(payload, sys.stdout, indent=2, sort_keys=False)
-        sys.stdout.write("\n")
-    else:
+        if args.json_file:
+            try:
+                with open(args.json_file, "w", encoding="utf-8") as fh:
+                    json.dump(payload, fh, indent=2, sort_keys=False)
+                    fh.write("\n")
+            except OSError as exc:
+                sys.stderr.write("unfaked: cannot write %s (%s)\n" % (args.json_file, exc))
+                return 2
+        if args.json:
+            json.dump(payload, sys.stdout, indent=2, sort_keys=False)
+            sys.stdout.write("\n")
+
+    if not args.json:
         st = Style(color_enabled(args.no_color))
         sys.stdout.write(render(report, st, quiet=args.quiet))
 

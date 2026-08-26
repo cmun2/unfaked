@@ -1,0 +1,237 @@
+name: unfaked
+description: Check whether an agent's tests actually test its change, by reverting the change and running them.
+author: cmun2
+
+branding:
+  icon: eye-off
+  color: red
+
+inputs:
+  path:
+    description: Repository to inspect.
+    default: "."
+  base:
+    description: >
+      Compare against this ref. Defaults to the pull request's base branch, or
+      HEAD~1 on a push. Needs the merge-base, so check out with fetch-depth 0.
+    default: ""
+  head:
+    description: Inspect this commit rather than the working tree.
+    default: ""
+  deep:
+    description: >
+      Run the revert probe. On by default here: CI has the time an agent
+      hand-off does not, and a pull request is where a test that proves nothing
+      costs the most.
+    default: "true"
+  skip:
+    description: Space-separated checks to skip.
+    default: ""
+  only:
+    description: Space-separated checks to run instead of all of them.
+    default: ""
+  timeout:
+    description: Seconds the probe may spend running tests.
+    default: "900"
+  install:
+    description: >
+      Shell run before the checks, to make the repository's tests runnable. The
+      probe re-runs them, so without this it has nothing to run.
+    default: ""
+  version:
+    description: Version of unfaked to install. Empty means the latest release.
+    default: ""
+  install-from:
+    description: >
+      Requirement to install instead of the release on PyPI. Point it at a
+      checkout ("." or a path) to run an unreleased version, or at a fork.
+    default: ""
+  exit-zero:
+    description: >
+      Report without failing the job. Worth a week of this on an existing
+      repository before you turn the gate on.
+    default: "false"
+  comment:
+    description: Post the report as a pull request comment, updating it in place.
+    default: "false"
+  github-token:
+    description: Token used for the comment. Needs pull-requests write.
+    default: ${{ github.token }}
+
+outputs:
+  fail:
+    description: Number of FAIL findings.
+    value: ${{ steps.run.outputs.fail }}
+  warn:
+    description: Number of WARN findings.
+    value: ${{ steps.run.outputs.warn }}
+  headline:
+    description: The one-sentence verdict.
+    value: ${{ steps.run.outputs.headline }}
+  json:
+    description: Path to the full JSON report.
+    value: ${{ steps.run.outputs.json }}
+
+runs:
+  using: composite
+  steps:
+    # unfaked has no dependencies, so it installs next to the project rather
+    # than in an isolated environment. That is deliberate: the probe runs the
+    # repository's own tests, and it finds the interpreter by looking at the one
+    # it is running under. Isolating it would hide pytest from it.
+    - name: install unfaked
+      shell: bash
+      env:
+        UNFAKED_VERSION: ${{ inputs.version }}
+        UNFAKED_FROM: ${{ inputs.install-from }}
+      run: |
+        set -uo pipefail
+        requirement="$UNFAKED_FROM"
+        if [ -z "$requirement" ]; then
+          requirement="unfaked"
+          if [ -n "$UNFAKED_VERSION" ]; then
+            requirement="unfaked==$UNFAKED_VERSION"
+          fi
+        fi
+        python -m pip install --disable-pip-version-check --quiet "$requirement"
+        python -m unfaked --version
+
+    - name: prepare the repository
+      if: inputs.install != ''
+      shell: bash
+      working-directory: ${{ inputs.path }}
+      run: ${{ inputs.install }}
+
+    - name: unfaked
+      id: run
+      shell: bash
+      working-directory: ${{ inputs.path }}
+      env:
+        # The report is read by a human in the log, so keep it plain: Actions
+        # renders ANSI, but the same text is reused verbatim in the job summary
+        # and the pull request comment, where it would show as escape codes.
+        # Every input reaches the shell as an environment variable rather than
+        # through ${{ }} interpolation, so a value containing shell syntax is
+        # data and not script.
+        UNFAKED_BASE: ${{ inputs.base }}
+        UNFAKED_HEAD: ${{ inputs.head }}
+        UNFAKED_DEEP: ${{ inputs.deep }}
+        UNFAKED_SKIP: ${{ inputs.skip }}
+        UNFAKED_ONLY: ${{ inputs.only }}
+        UNFAKED_TIMEOUT: ${{ inputs.timeout }}
+        UNFAKED_EXIT_ZERO: ${{ inputs.exit-zero }}
+        UNFAKED_EVENT: ${{ github.event_name }}
+        UNFAKED_BASE_REF: ${{ github.base_ref }}
+      run: |
+        set -uo pipefail
+
+        base="$UNFAKED_BASE"
+        if [ -z "$base" ] && [ "$UNFAKED_EVENT" = "pull_request" ]; then
+          base="origin/$UNFAKED_BASE_REF"
+        fi
+        if [ -n "$base" ] && ! git rev-parse --verify --quiet "$base^{commit}" >/dev/null; then
+          echo "::error::cannot resolve '$base'. Check out with fetch-depth: 0 so the merge-base is present."
+          exit 2
+        fi
+
+        args=(--no-color --timeout "$UNFAKED_TIMEOUT")
+        if [ -n "$base" ]; then args+=(--base "$base"); fi
+        if [ -n "$UNFAKED_HEAD" ]; then args+=(--head "$UNFAKED_HEAD"); fi
+        if [ "$UNFAKED_DEEP" = "true" ]; then args+=(--deep); fi
+        for check in $UNFAKED_SKIP; do args+=(--skip "$check"); done
+        for check in $UNFAKED_ONLY; do args+=(--only "$check"); done
+
+        report="$RUNNER_TEMP/unfaked.txt"
+        json="$RUNNER_TEMP/unfaked.json"
+
+        # One run, both artefacts. The probe is the expensive part; running it
+        # twice to get a second output format would double the cost of the job.
+        python -m unfaked --json-file "$json" "${args[@]}" | tee "$report"
+        code=${PIPESTATUS[0]}
+
+        if [ ! -f "$json" ]; then
+          echo "::error::unfaked exited $code without producing a report."
+          exit "$code"
+        fi
+
+        # Read once, into a file the shell can source and the step can hand on
+        # as outputs. shlex.quote keeps a headline containing quotes from
+        # becoming shell syntax.
+        python - "$json" "$RUNNER_TEMP/unfaked.env" <<'PY'
+        import json, shlex, sys
+        with open(sys.argv[1]) as fh:
+            payload = json.load(fh)
+        values = {
+            "fails": str(payload["counts"]["fail"]),
+            "warns": str(payload["counts"]["warn"]),
+            "headline": payload["headline"].replace("\n", " "),
+        }
+        with open(sys.argv[2], "w") as fh:
+            for key, value in values.items():
+                fh.write("%s=%s\n" % (key, shlex.quote(value)))
+        PY
+        . "$RUNNER_TEMP/unfaked.env"
+
+        {
+          echo "fail=$fails"
+          echo "warn=$warns"
+          echo "headline=$headline"
+          echo "json=$json"
+          echo "report=$report"
+        } >> "$GITHUB_OUTPUT"
+
+        {
+          echo "## unfaked"
+          echo
+          echo "$headline"
+          echo
+          echo '```'
+          cat "$report"
+          echo '```'
+        } >> "$GITHUB_STEP_SUMMARY"
+
+        # An annotation puts the verdict on the Files changed tab, where the
+        # person reading the diff already is.
+        if [ "$fails" != "0" ]; then
+          echo "::error title=unfaked::$headline"
+        elif [ "$warns" != "0" ]; then
+          echo "::warning title=unfaked::$headline"
+        fi
+
+        if [ "$UNFAKED_EXIT_ZERO" = "true" ]; then exit 0; fi
+        exit "$code"
+
+    # Always: a green run saying "all 9 tests fail with the change reverted" is
+    # worth as much as a red one, and it is the only way to see the gate working
+    # before it ever fires.
+    - name: comment
+      if: always() && inputs.comment == 'true' && github.event_name == 'pull_request' && steps.run.outputs.report != ''
+      shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.github-token }}
+        REPORT: ${{ steps.run.outputs.report }}
+        HEADLINE: ${{ steps.run.outputs.headline }}
+        NUMBER: ${{ github.event.pull_request.number }}
+      run: |
+        marker='<!-- unfaked -->'
+        {
+          echo "$marker"
+          echo "**$HEADLINE**"
+          echo
+          echo '```'
+          cat "$REPORT"
+          echo '```'
+        } > "$RUNNER_TEMP/comment.md"
+
+        # Update in place. A gate that appends a comment on every push turns a
+        # long-running pull request into a wall of stale reports.
+        existing=$(gh api "repos/${{ github.repository }}/issues/$NUMBER/comments" \
+          --jq "[.[] | select(.body | startswith(\"$marker\"))] | last | .id // empty")
+
+        if [ -n "$existing" ]; then
+          gh api --method PATCH "repos/${{ github.repository }}/issues/comments/$existing" \
+            -F body=@"$RUNNER_TEMP/comment.md" --silent
+        else
+          gh api --method POST "repos/${{ github.repository }}/issues/$NUMBER/comments" \
+            -F body=@"$RUNNER_TEMP/comment.md" --silent
+        fi

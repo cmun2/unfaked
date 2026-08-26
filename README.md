@@ -112,11 +112,48 @@ as-is. `--exit-zero` turns that off.
 | `--fast` / `--deep` | static only (default), or add the revert probe |
 | `--skip CHECK` / `--only CHECK` | pick checks; repeatable, comma-separated |
 | `--json` | full report as JSON |
+| `--json-file PATH` | write the JSON there and keep the report on stdout |
 | `--no-color` | plain text (also honours `NO_COLOR`; auto-off when piped) |
 | `-v` | show INFO findings as well |
 | `-q` | one line when there is nothing to report (for hooks) |
 | `--exit-zero` | always exit 0 |
 | `--timeout SEC` | cap on each test run (default 600) |
+
+## In CI
+
+```yaml
+- uses: actions/checkout@v4
+  with:
+    fetch-depth: 0          # --base needs the merge-base
+
+- uses: cmun2/unfaked@v1
+  with:
+    install: pip install -e ".[dev]"
+```
+
+A pull request is where a test that proves nothing costs the most, and CI has
+the time the agent hand-off does not, so `--deep` is the default here. The
+report lands in the job summary and the verdict becomes an annotation on the
+Files changed tab. `comment: true` posts it on the pull request instead,
+updating the same comment rather than adding one per push.
+
+| input | |
+|---|---|
+| `install` | shell that makes the tests runnable — the probe re-runs them |
+| `base` / `head` | default to the pull request's base branch |
+| `deep` | `false` for static checks only |
+| `skip` / `only` | space-separated check names |
+| `exit-zero` | report without failing the job |
+| `comment` | post the report on the pull request |
+| `timeout` | seconds the probe may spend (default 900) |
+
+Outputs `fail`, `warn`, `headline` and `json` for later steps.
+
+On an existing repository the first run usually finds something. To land the
+gate without a red pull request queue, start with `exit-zero: true`, read the
+summaries for a week, then take it off. `integrations/github-action.yml` is the
+same thing written out as plain steps if you would rather not depend on an
+action.
 
 ## What it checks
 
@@ -336,9 +373,44 @@ output again. FAIL is reserved for things with no innocent reading; WARN is for
 things usually worth a look; anything `unfaked` cannot back with a file, a line
 and a command is not reported at all.
 
-Measured against three real repositories — 8 commits in total, all verified by
-hand first — **0 false-positive FAILs**. Run with `--deep`, so the probe is
-included; the fast default would report it as `not run` on all three.
+There is a benchmark, and you can run it:
+
+```
+python benchmark/run.py --deep
+```
+
+It builds 14 repositories from scratch — 10 with a planted problem, 4 honest
+controls doing real work — and then runs the same checks over the last 25
+commits of this repository, where every commit is real work rather than a
+plant. One number matters in each direction:
+
+```
+fixtures — 14 generated repositories, probe included
+  caught 10/10 · false alarms 0/4 controls
+
+history — 12 real commits of this repository, probe included
+  false-positive FAILs   0   (static checks only)
+  added tests            7 of 12 commits
+  probe reached a verdict 6 of 7 (86%)
+  added tests that do not distinguish their change   7
+```
+
+That last line is not an error rate, and it is the most interesting number
+here. Seven tests written for this repository pass whether or not the change
+they accompany is present. They are mostly controls — `bc7060b` fixed
+suppression matching inside string literals and added
+`test_a_real_comment_is_still_a_suppression`, which asserts the behaviour that
+was deliberately *not* changed. Passing both ways is what a control does. The
+probe says only what is true — *this test does not distinguish the change* —
+and leaves the reading to you. Counting that as a false alarm would mean
+punishing the tool for being right.
+
+The false-positive number covers the static checks, which claim something did
+happen. On 12 commits of real work they claim nothing: **0**.
+
+Beyond the benchmark, three real repositories — 8 commits, all verified by hand
+first — also produced **0 false-positive FAILs**. Run with `--deep`, so the
+probe is included; the fast default would report it as `not run` on all three.
 
 A fork of `anthropic-sdk-python`: a bug fix plus 9 new tests. This repository
 runs pytest under `-n auto`, and pytest says this on every run:

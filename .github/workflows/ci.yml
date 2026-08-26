@@ -1,0 +1,116 @@
+# The tests, the benchmark, and unfaked checking its own pull requests.
+#
+# The last one is the point. A tool that says your tests do not test your change
+# has to survive being pointed at itself, and the run below is the only claim
+# here that cannot be written rather than earned.
+
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  tests:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        # The probe shells out to git and to whatever runner the repository
+        # uses, so the interesting axis is the platform, not the interpreter.
+        os: [ubuntu-latest, macos-latest]
+        python: ["3.9", "3.13"]
+        exclude:
+          - os: macos-latest
+            python: "3.9"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+      - run: pip install pytest
+      - run: python -m pytest tests/ -q
+
+  benchmark:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # The history corpus reads this repository's own commits.
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - run: pip install pytest
+
+      - name: benchmark
+        run: python benchmark/run.py --deep --json benchmark.json | tee benchmark.txt
+
+      # The numbers are in the README, so a change that moves them should be
+      # visible in the pull request that moves them.
+      - name: summary
+        if: always()
+        run: |
+          {
+            echo '## benchmark'
+            echo
+            echo '```'
+            cat benchmark.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: no false alarms
+        run: |
+          python - <<'PY'
+          import json, sys
+          numbers = json.load(open("benchmark.json"))
+          fixtures, history = numbers["fixtures"], numbers["history"]
+          problems = []
+          if fixtures["caught"] != fixtures["expected"]:
+              problems.append("fixtures: caught %(caught)d of %(expected)d" % fixtures)
+          if fixtures["false_alarms"]:
+              problems.append("fixtures: %d false alarms" % fixtures["false_alarms"])
+          if history["false_positive_fails"]:
+              problems.append(
+                  "history: %d static findings on real work" % history["false_positive_fails"]
+              )
+          for line in problems:
+              print("::error title=benchmark::%s" % line)
+          sys.exit(1 if problems else 0)
+          PY
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: benchmark
+          path: benchmark.json
+
+  unfaked:
+    # Only on pull requests: on a push to main there is no proposed change left
+    # to argue with.
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: unfaked
+        uses: ./
+        with:
+          # The version under review, not the one on PyPI. Checking a pull
+          # request with the previous release would let a change break the
+          # checks and pass its own gate.
+          install-from: .
+          install: pip install pytest
+          comment: "true"

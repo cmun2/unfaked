@@ -961,6 +961,70 @@ class TestCli(unittest.TestCase):
 
         self.assertEqual(2, cli.main(["--skip", "nonsense"]))
 
+    def test_json_file_writes_the_payload_and_keeps_the_report_on_stdout(self):
+        # CI wants both from one run: the readable report in the log, the
+        # payload as an artefact. Re-running to get the second format would
+        # mean running the probe twice.
+        import contextlib
+        import io
+        import json as json_module
+        import tempfile
+
+        from unfaked import cli
+
+        with base_repo("cli-jsonfile") as r:
+            r.write("tests/test_empty.py", "def test_todo():\n    pass\n")
+            r.commit("add coverage")
+            target = os.path.join(tempfile.mkdtemp(), "report.json")
+            buf = io.StringIO()
+            with contextlib.redirect_stdout(buf):
+                code = cli.main([r.path, "--json-file", target, "--no-color"] + list(NO_PROBE))
+
+            self.assertEqual(1, code)
+            printed = buf.getvalue()
+            self.assertIn("hollow-tests", printed)
+            self.assertNotIn('"counts"', printed)
+
+            with open(target) as fh:
+                payload = json_module.load(fh)
+            self.assertTrue(fails(payload, "hollow-tests"))
+
+    def test_json_file_alongside_json_writes_both(self):
+        import contextlib
+        import io
+        import json as json_module
+        import tempfile
+
+        from unfaked import cli
+
+        with base_repo("cli-jsonboth") as r:
+            r.write("tests/test_empty.py", "def test_todo():\n    pass\n")
+            r.commit("add coverage")
+            target = os.path.join(tempfile.mkdtemp(), "report.json")
+            buf = io.StringIO()
+            with contextlib.redirect_stdout(buf):
+                cli.main([r.path, "--json", "--json-file", target] + list(NO_PROBE))
+
+            self.assertEqual(json_module.loads(buf.getvalue()), json_module.load(open(target)))
+
+    def test_json_file_in_a_missing_directory_reports_rather_than_crashes(self):
+        import contextlib
+        import io
+
+        from unfaked import cli
+
+        with base_repo("cli-jsonbad") as r:
+            r.write("tests/test_ok.py", "def test_ok():\n    assert True\n")
+            r.commit("add coverage")
+            with contextlib.redirect_stdout(io.StringIO()):
+                with contextlib.redirect_stderr(io.StringIO()) as err:
+                    code = cli.main(
+                        [r.path, "--json-file", os.path.join(r.path, "no", "such", "d.json")]
+                        + list(NO_PROBE)
+                    )
+            self.assertEqual(2, code)
+            self.assertIn("cannot write", err.getvalue())
+
 
 if __name__ == "__main__":
     unittest.main()
