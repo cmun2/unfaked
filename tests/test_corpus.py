@@ -1007,7 +1007,28 @@ class TestCli(unittest.TestCase):
 
             self.assertEqual(json_module.loads(buf.getvalue()), json_module.load(open(target)))
 
-    def test_json_file_in_a_missing_directory_reports_rather_than_crashes(self):
+    def test_json_file_creates_the_directory_it_was_given(self):
+        # `--json-file reports/unfaked.json` should not need an mkdir in front
+        # of it.
+        import contextlib
+        import io
+        import json as json_module
+
+        from unfaked import cli
+
+        with base_repo("cli-jsonmkdir") as r:
+            r.write("tests/test_ok.py", "def test_ok():\n    assert True\n")
+            r.commit("add coverage")
+            target = os.path.join(r.path, "reports", "nested", "unfaked.json")
+            with contextlib.redirect_stdout(io.StringIO()):
+                cli.main([r.path, "--json-file", target] + list(NO_PROBE))
+
+            # Before this, the missing `reports/nested` was an error and no
+            # file was written at all.
+            with open(target) as fh:
+                self.assertIn("counts", json_module.load(fh))
+
+    def test_json_file_that_cannot_be_written_reports_rather_than_crashes(self):
         import contextlib
         import io
 
@@ -1016,11 +1037,15 @@ class TestCli(unittest.TestCase):
         with base_repo("cli-jsonbad") as r:
             r.write("tests/test_ok.py", "def test_ok():\n    assert True\n")
             r.commit("add coverage")
+            # A file where a directory would have to be: no mkdir can fix this
+            # one, so it still has to be reported rather than raised.
+            blocker = os.path.join(r.path, "blocker")
+            with open(blocker, "w") as fh:
+                fh.write("not a directory\n")
             with contextlib.redirect_stdout(io.StringIO()):
                 with contextlib.redirect_stderr(io.StringIO()) as err:
                     code = cli.main(
-                        [r.path, "--json-file", os.path.join(r.path, "no", "such", "d.json")]
-                        + list(NO_PROBE)
+                        [r.path, "--json-file", os.path.join(blocker, "d.json")] + list(NO_PROBE)
                     )
             self.assertEqual(2, code)
             self.assertIn("cannot write", err.getvalue())
