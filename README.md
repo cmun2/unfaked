@@ -184,7 +184,20 @@ action.
 </p>
 
 Reverts the changed source files, re-runs *only* the tests the diff added, and
-reports every one that still passes. **FAIL**.
+reports every one that still passes.
+
+| | |
+|---|---|
+| a test passes both ways, and **nothing** the change added fails when reverted | **FAIL** |
+| a test passes both ways, but something else the change added does fail without it | WARN |
+
+The severity depends on the company it keeps, because a test that passes both
+ways is a true observation and not automatically a fake — it is also exactly
+what a *control* looks like, a test pinning the behaviour the change
+deliberately left alone. If something else the change added fails when
+reverted, the change is demonstrably tested and the survivors read as controls
+worth a glance. If nothing added distinguishes the change, there is no innocent
+reading left, and that is the case this tool exists for.
 
 Tests that already fail on the committed code, or that the runner reports nothing
 for, are listed as INFO — they are not evidence either way.
@@ -388,28 +401,32 @@ plant. One number matters in each direction:
 fixtures — 14 generated repositories, probe included
   caught 10/10 · false alarms 0/4 controls
 
-history — 14 real commits of this repository, probe included
+history — 15 real commits of this repository, probe included
   false-positive FAILs   0   (static checks only)
   probe reached a verdict 7 of 8 (88%)
   added tests that do not distinguish their change   7
+    of those, in changes where nothing added does   2  (these block)
 ```
 
 The fixtures are generated, so those numbers are fixed. The history numbers
-move as this repository gains commits; the ones above are from `4e3d08f`, run
+move as this repository gains commits; the ones above are from `7b59138`, run
 on a clean CI machine rather than quoted from a laptop. CI runs both corpora on
 every change and fails the build if a planted problem is missed, a control is
 flagged, or a static check fires on real work — so the two zeros are enforced
 rather than reported.
 
-That last line is not an error rate, and it is the most interesting number
-here. Seven tests written for this repository pass whether or not the change
-they accompany is present. They are mostly controls — `bc7060b` fixed
+Those last two lines are not an error rate, and they are the most interesting
+numbers here. Seven tests written for this repository pass whether or not the
+change they accompany is present — but in five of those seven cases, something
+else the same change added *does* fail when reverted, so the change is
+demonstrably tested and those five read as controls. `bc7060b` is one: it fixed
 suppression matching inside string literals and added
 `test_a_real_comment_is_still_a_suppression`, which asserts the behaviour that
-was deliberately *not* changed. Passing both ways is what a control does. The
-probe says only what is true — *this test does not distinguish the change* —
-and leaves the reading to you. Counting that as a false alarm would mean
-punishing the tool for being right.
+was deliberately *not* changed. Passing both ways is what a control does, and
+blocking on it would mean punishing the tool for being right.
+
+The remaining two are the ones worth reading: nothing those changes added fails
+when reverted. Those still block.
 
 The false-positive number covers the static checks, which claim something did
 happen. On 12 commits of real work they claim nothing: **0**.

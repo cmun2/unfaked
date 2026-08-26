@@ -142,6 +142,14 @@ def headline(report: Report) -> str:
     if probe is not None and probe.stats:
         survived = probe.stats.get("survived", 0)
         added = probe.stats.get("added", 0)
+        distinguishing = probe.stats.get("distinguishing", 0)
+        if survived and distinguishing:
+            # Both halves matter. Leading with the survivors alone reads as an
+            # accusation when the change is, in fact, demonstrably tested.
+            return (
+                "%d of the %d tests it added also pass with the change reverted; "
+                "the other %d fail without it." % (survived, added, distinguishing)
+            )
         if survived:
             return "%d of the %d tests it added still pass with the change reverted." % (
                 survived,
