@@ -10,6 +10,9 @@ on:
   push:
     branches: [main]
   pull_request:
+  # The benchmark is a claim in the README, so anyone reading it should be able
+  # to make it run rather than take the number on trust.
+  workflow_dispatch:
 
 permissions:
   contents: read

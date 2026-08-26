@@ -209,6 +209,7 @@ runs:
       shell: bash
       env:
         GH_TOKEN: ${{ inputs.github-token }}
+        GH_REPO: ${{ github.repository }}
         REPORT: ${{ steps.run.outputs.report }}
         HEADLINE: ${{ steps.run.outputs.headline }}
         NUMBER: ${{ github.event.pull_request.number }}
@@ -225,13 +226,22 @@ runs:
 
         # Update in place. A gate that appends a comment on every push turns a
         # long-running pull request into a wall of stale reports.
-        existing=$(gh api "repos/${{ github.repository }}/issues/$NUMBER/comments" \
-          --jq "[.[] | select(.body | startswith(\"$marker\"))] | last | .id // empty")
+        # A comment is a courtesy; the verdict is already the step's exit code,
+        # the annotation and the job summary. If the token cannot write to pull
+        # requests, say so once and leave the gate's own result standing rather
+        # than turning a passing check red over a missing permission.
+        post() {
+          existing=$(gh api "repos/$GH_REPO/issues/$NUMBER/comments" \
+            --jq "[.[] | select(.body | startswith(\"$marker\"))] | last | .id // empty") || return 1
+          if [ -n "$existing" ]; then
+            gh api --method PATCH "repos/$GH_REPO/issues/comments/$existing" \
+              -F body=@"$RUNNER_TEMP/comment.md" --silent
+          else
+            gh api --method POST "repos/$GH_REPO/issues/$NUMBER/comments" \
+              -F body=@"$RUNNER_TEMP/comment.md" --silent
+          fi
+        }
 
-        if [ -n "$existing" ]; then
-          gh api --method PATCH "repos/${{ github.repository }}/issues/comments/$existing" \
-            -F body=@"$RUNNER_TEMP/comment.md" --silent
-        else
-          gh api --method POST "repos/${{ github.repository }}/issues/$NUMBER/comments" \
-            -F body=@"$RUNNER_TEMP/comment.md" --silent
+        if ! post; then
+          echo "::warning title=unfaked::could not post the comment. Give the job 'permissions: pull-requests: write'."
         fi
