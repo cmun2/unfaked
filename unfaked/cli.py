@@ -429,6 +429,11 @@ def main(argv: Optional[List[str]] = None) -> int:
         }
         if args.json_file:
             try:
+                # `--json-file reports/unfaked.json` is the shape CI asks for,
+                # and failing because `reports/` does not exist yet would make
+                # every workflow carry an mkdir ahead of the call.
+                parent = os.path.dirname(os.path.abspath(args.json_file))
+                os.makedirs(parent, exist_ok=True)
                 with open(args.json_file, "w", encoding="utf-8") as fh:
                     json.dump(payload, fh, indent=2, sort_keys=False)
                     fh.write("\n")

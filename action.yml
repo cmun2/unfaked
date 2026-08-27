@@ -123,6 +123,12 @@ runs:
         UNFAKED_EVENT: ${{ github.event_name }}
         UNFAKED_BASE_REF: ${{ github.base_ref }}
       run: |
+        # GitHub runs composite steps with `bash -eo pipefail`, and this script
+        # decides its own exit code from the checker's. Left on, errexit kills
+        # it at the `| tee` below the moment a check fails -- taking the job
+        # summary, the annotation, the outputs and the comment with it, on
+        # exactly the run where they are worth having.
+        set +e
         set -uo pipefail
 
         base="$UNFAKED_BASE"

@@ -122,7 +122,7 @@ as-is. `--exit-zero` turns that off.
 ## In CI
 
 ```yaml
-- uses: actions/checkout@v4
+- uses: actions/checkout@v7
   with:
     fetch-depth: 0          # --base needs the merge-base
 
