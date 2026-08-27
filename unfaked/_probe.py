@@ -17,7 +17,7 @@ import sys
 import tempfile
 from typing import Dict, List, Optional, Sequence, Tuple
 
-from ._finding import FAIL, INFO, CheckResult, Finding
+from ._finding import FAIL, INFO, WARN, CheckResult, Finding
 from ._git import GitError, git, rev_parse
 from ._shadow import shadow_workspace
 from ._lang import JSTS, PYTHON, TestFn, is_test_file
@@ -441,20 +441,46 @@ def run(
         one = " ".join(_quote(c) for c in runner.command_for([t], **({"shown": True} if isinstance(runner, PytestRunner) else {})))
         return "%s && %s" % (revert_cmd_display, one)
 
+    # A test that passes both ways is a true observation, not automatically a
+    # fake. It is also what a control looks like -- a test asserting the
+    # behaviour the change deliberately left alone. So the severity depends on
+    # the company it keeps: if something else the change added does fail when
+    # reverted, the change is demonstrably tested and these read as controls.
+    # If nothing added distinguishes the change, there is no innocent reading
+    # left, and that is the case this tool exists for.
+    distinguishing = [t for t in passing_now if t not in survivors]
+    severity = WARN if distinguishing else FAIL
+
     for t in survivors:
+        if distinguishing:
+            why = (
+                "This test passes both with and without the source change, so it does not "
+                "demonstrate the change did anything. %d other added test%s does, so this may "
+                "be a control rather than a hollow test -- worth confirming it is deliberate."
+                % (len(distinguishing), "" if len(distinguishing) == 1 else "s")
+            )
+        else:
+            why = (
+                "This test passes both with and without the source change, so it does not "
+                "demonstrate the change did anything, and no other test the change added "
+                "does either."
+            )
         res.add(
             Finding(
                 NAME,
-                FAIL,
+                severity,
                 "still passes with the change reverted: %s" % t.name,
                 t.path,
                 t.lineno,
                 snippet(t, 3),
-                why="This test passes both with and without the source change, so it does not "
-                "demonstrate the change did anything.",
+                why=why,
                 fix="Make the assertion depend on the new behaviour, then confirm it fails on the old code.",
                 command=repro_for(t),
-                extra={"test": t.qualname, "nodeid": _key_for(t)},
+                extra={
+                    "test": t.qualname,
+                    "nodeid": _key_for(t),
+                    "distinguishing_siblings": len(distinguishing),
+                },
             )
         )
 
@@ -499,6 +525,7 @@ def run(
         "added": len(added_tests),
         "probed": len(passing_now),
         "survived": len(survivors),
+        "distinguishing": len(distinguishing),
         "cases_probed": probed_cases,
         "cases_survived": survived_cases,
         "runner": ", ".join(sorted(getattr(r, "label", "?") for r in runners.values())),

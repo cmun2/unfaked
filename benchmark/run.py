@@ -234,7 +234,7 @@ def run_history(limit: int, deep: bool) -> Dict:
         .stdout.decode()
         .split()
     )
-    rows, fails, evaluable, inconclusive, no_tests, nondist = [], 0, 0, 0, 0, 0
+    rows, fails, evaluable, inconclusive, no_tests, nondist, undem = [], 0, 0, 0, 0, 0, 0
     for rev in revs:
         # The root commit has no parent, so there is no change to read.
         if subprocess.run(
@@ -257,10 +257,16 @@ def run_history(limit: int, deep: bool) -> Dict:
             for finding in check.get("findings", [])
             if str(finding.get("severity", "")).lower() == "fail"
         )
-        n_nondistinguishing = sum(
-            1
+        nondistinguishing = [
+            finding
             for finding in probe.get("findings", [])
-            if str(finding.get("severity", "")).lower() == "fail"
+            if finding.get("title", "").startswith("still passes with the change reverted")
+        ]
+        n_nondistinguishing = len(nondistinguishing)
+        # The subset with no distinguishing sibling: nothing the change added
+        # tests it. Those still block, and they are the ones worth reading.
+        n_undemonstrated = sum(
+            1 for f in nondistinguishing if str(f.get("severity", "")).lower() == "fail"
         )
         if payload["tests_added"] == 0:
             no_tests += 1
@@ -270,12 +276,14 @@ def run_history(limit: int, deep: bool) -> Dict:
             inconclusive += 1
         fails += n_fail
         nondist += n_nondistinguishing
+        undem += n_undemonstrated
         rows.append(
             {
                 "rev": rev[:12],
                 "tests_added": payload["tests_added"],
                 "fail": n_fail,
                 "not_distinguishing": n_nondistinguishing,
+                "undemonstrated": n_undemonstrated,
                 "probe": status,
             }
         )
@@ -284,6 +292,7 @@ def run_history(limit: int, deep: bool) -> Dict:
         "commits": len(rows),
         "false_positive_fails": fails,
         "not_distinguishing": nondist,
+        "undemonstrated": undem,
         "evaluable": evaluable,
         "inconclusive": inconclusive,
         "no_tests_added": no_tests,
@@ -330,6 +339,8 @@ def main() -> int:
               % (hist["evaluable"], judged, share))
         print("    added tests that do not distinguish their change   %d"
               % hist["not_distinguishing"])
+        print("      of those, in changes where nothing added does   %d  (these block)"
+              % hist["undemonstrated"])
     print()
 
     payload = {"fixtures": fx, "history": hist}

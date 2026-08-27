@@ -231,6 +231,54 @@ class TestRevertProbe(unittest.TestCase):
             self.assertEqual("ok", check_status(payload, "revert-probe"))
             self.assertEqual(0, code)
 
+    def test_a_control_beside_a_real_test_warns_rather_than_fails(self):
+        # Two tests: one exercises the guard, one asserts the behaviour the
+        # change deliberately left alone. The second passes both ways because
+        # that is what a control does, so it is worth saying and not worth
+        # blocking on.
+        with base_repo("a4-mixed") as r:
+            r.write("src/calc.py", SRC_AFTER)
+            r.write(
+                "tests/test_guard.py",
+                "import pytest\n\nfrom src.calc import add\n\n\n"
+                "def test_guard_rejects_none():\n"
+                "    with pytest.raises(ValueError):\n"
+                "        add(None, 1)\n\n\n"
+                "def test_ordinary_addition_still_works():\n"
+                "    assert add(2, 3) == 5\n",
+            )
+            r.commit("guard against None, with a test and a control")
+            payload, code = r.run("--deep")
+
+            self.assertEqual([], fails(payload, "revert-probe"), payload["checks"])
+            hits = warns(payload, "revert-probe")
+            self.assertEqual(1, len(hits), payload["checks"])
+            self.assertIn("test_ordinary_addition_still_works", hits[0]["title"])
+            self.assertIn("may be a control", hits[0]["why"])
+            self.assertEqual(0, code)
+            self.assertIn("the other 1 fail without it", payload["headline"])
+
+    def test_when_nothing_added_distinguishes_it_still_fails(self):
+        # Same two tests, except neither touches the guard. Now there is no
+        # innocent reading left.
+        with base_repo("a4-none") as r:
+            r.write("src/calc.py", SRC_AFTER)
+            r.write(
+                "tests/test_guard.py",
+                "from src.calc import add\n\n\n"
+                "def test_ordinary_addition_still_works():\n"
+                "    assert add(2, 3) == 5\n\n\n"
+                "def test_addition_of_negatives():\n"
+                "    assert add(-1, -1) == -2\n",
+            )
+            r.commit("guard against None, with tests")
+            payload, code = r.run("--deep")
+
+            hits = fails(payload, "revert-probe")
+            self.assertEqual(2, len(hits), payload["checks"])
+            self.assertIn("no other test the change added does either", hits[0]["why"])
+            self.assertEqual(1, code)
+
     def test_restores_the_working_tree(self):
         with base_repo("a4-restore") as r:
             r.write("src/calc.py", SRC_AFTER)
