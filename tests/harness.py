@@ -99,4 +99,11 @@ def check_status(payload, name):
     raise KeyError(name)
 
 
+def check_note(payload, name):
+    for c in payload["checks"]:
+        if c["check"] == name:
+            return c.get("note") or ""
+    raise KeyError(name)
+
+
 NO_PROBE = ("--skip", "revert-probe")

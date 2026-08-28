@@ -7,7 +7,7 @@ import os
 import subprocess
 import unittest
 
-from harness import NO_PROBE, Repo, check_status, fails, findings, warns
+from harness import NO_PROBE, Repo, check_note, check_status, fails, findings, warns
 
 SRC_BEFORE = '''\
 def add(a, b):
@@ -514,11 +514,12 @@ class TestProbeSurvivesForcedColour(unittest.TestCase):
         self.assertEqual("1", env["NO_COLOR"])
 
 
-class TestFastIsTheDefault(unittest.TestCase):
-    """The probe re-runs the suite once per added test, so it is opt-in.
+class TestTheProbeRunsByDefault(unittest.TestCase):
+    """The probe is the check the other three cannot stand in for.
 
-    Fast mode is what makes this usable on every agent hand-off; if the probe
-    ever creeps back into the default these tests fail.
+    A vacuous test is shaped like a real one, so only reverting finds it. If
+    the default ever stops running the probe, the tool ships an install that
+    never performs its own headline check, and these tests fail.
     """
 
     def _vacuous(self, name):
@@ -532,23 +533,46 @@ class TestFastIsTheDefault(unittest.TestCase):
         ctx.commit("guard against None, with a test")
         return r, ctx
 
-    def test_default_does_not_run_the_probe(self):
+    def test_default_runs_the_probe(self):
         r, ctx = self._vacuous("mode-default")
         try:
             payload, code = ctx.run()
+            self.assertEqual(1, len(fails(payload, "revert-probe")))
+            self.assertEqual(1, code)
+            self.assertIn("with the change reverted", payload["headline"])
+        finally:
+            r.__exit__(None, None, None)
+
+    def test_fast_defers_it_and_says_so(self):
+        r, ctx = self._vacuous("mode-fast")
+        try:
+            payload, _ = ctx.run("--fast")
             self.assertEqual("inconclusive", check_status(payload, "revert-probe"))
-            self.assertIn("--deep", payload["checks"][1]["note"])
             # the vacuous test goes unnoticed, and nothing claims otherwise
             self.assertEqual([], fails(payload, "revert-probe"))
             self.assertNotIn("with the change reverted", payload["headline"])
         finally:
             r.__exit__(None, None, None)
 
-    def test_explicit_fast_matches_the_default(self):
-        r, ctx = self._vacuous("mode-fast")
+    def test_a_budget_it_cannot_meet_is_reported_as_a_budget(self):
+        """Not as a broken suite. The suite ran; it was slower than the wait."""
+        r, ctx = self._vacuous("mode-budget")
         try:
-            payload, _ = ctx.run("--fast")
+            payload, code = ctx.run("--probe-budget", "0")
             self.assertEqual("inconclusive", check_status(payload, "revert-probe"))
+            note = check_note(payload, "revert-probe")
+            self.assertIn("budget", note)
+            self.assertNotIn("do not run cleanly", note)
+            self.assertEqual(0, code)
+        finally:
+            r.__exit__(None, None, None)
+
+    def test_only_the_probe_overrides_fast(self):
+        """Asking for it by name and being given nothing is worse than slow."""
+        r, ctx = self._vacuous("mode-only")
+        try:
+            payload, _ = ctx.run("--fast", "--only", "revert-probe")
+            self.assertEqual(1, len(fails(payload, "revert-probe")))
         finally:
             r.__exit__(None, None, None)
 

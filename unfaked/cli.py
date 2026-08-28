@@ -95,14 +95,16 @@ def build_parser() -> argparse.ArgumentParser:
             "checks:\n"
             + "\n".join("  %-16s %s" % (n, t) for n, t in CHECKS)
             + "\n\nexamples:\n"
-            "  unfaked                       # inspect HEAD~1..HEAD here (fast)\n"
-            "  unfaked --deep                # also re-run the tests with the change reverted\n"
+            "  unfaked                       # inspect HEAD~1..HEAD here\n"
+            "  unfaked --fast                # static checks only, never runs your code\n"
             "  unfaked --base main           # inspect everything since main\n"
             "  unfaked --scope 'src/**'      # flag edits outside the task\n"
             "\n"
-            "fast is the default because the moment this is for -- an agent has just\n"
-            "said it is done -- cannot afford to wait. --deep runs your test suite\n"
-            "several times, so keep it for review and CI.\n"
+            "the revert probe runs by default, because it is the check the other\n"
+            "three cannot stand in for. The moment this is for -- an agent has just\n"
+            "said it is done -- cannot afford to wait, so in --auto the probe is\n"
+            "given --probe-budget seconds and left unrun if it needs longer.\n"
+            "--deep removes the budget; --fast never runs your code at all.\n"
         ),
     )
     p.add_argument("path", nargs="?", default=".", help="repository to inspect (default: .)")
@@ -135,16 +137,32 @@ def build_parser() -> argparse.ArgumentParser:
     mode = p.add_mutually_exclusive_group()
     mode.add_argument(
         "--fast",
-        dest="deep",
-        action="store_false",
-        default=False,
-        help="static checks only, never runs your code (default)",
+        dest="mode",
+        action="store_const",
+        const="fast",
+        help="static checks only, never runs your code",
+    )
+    mode.add_argument(
+        "--auto",
+        dest="mode",
+        action="store_const",
+        const="auto",
+        help="run the revert probe too, but give up on it after --probe-budget (default)",
     )
     mode.add_argument(
         "--deep",
-        dest="deep",
-        action="store_true",
-        help="also revert the change and re-run the added tests",
+        dest="mode",
+        action="store_const",
+        const="deep",
+        help="run the revert probe with no budget",
+    )
+    p.set_defaults(mode="auto")
+    p.add_argument(
+        "--probe-budget",
+        type=int,
+        default=20,
+        metavar="SEC",
+        help="in --auto, how long the probe may take before it is left unrun (default: 20)",
     )
     p.add_argument("--json", action="store_true", help="machine-readable output")
     p.add_argument(
@@ -245,9 +263,10 @@ def _run_checks(args, ctx: Context, out_stream) -> Report:
         }
     )
     source_status = {fd.path: fd.status for fd in diffs}
+    probe_mode = _probe_mode(args)
     if not _enabled(_probe.NAME, args):
         results.append(_skipped(_probe.NAME, _probe.TITLE))
-    elif not _deep_requested(args):
+    elif probe_mode == "fast":
         results.append(_deferred(_probe.NAME, _probe.TITLE, bool(added_tests)))
     else:
         runners, _notes = _probe.detect_runners(repo, added_tests)
@@ -264,6 +283,7 @@ def _run_checks(args, ctx: Context, out_stream) -> Report:
                 [path for _xy, path in porcelain_status(repo)],
                 args.timeout,
                 evidence,
+                budget=args.probe_budget if probe_mode == "auto" else None,
             )
         )
 
@@ -321,12 +341,16 @@ def _skipped(name: str, title: str) -> CheckResult:
     return r.finalize()
 
 
-def _deep_requested(args) -> bool:
-    """--deep, or --only revert-probe, which asks for it by name."""
-    if args.deep:
-        return True
+def _probe_mode(args) -> str:
+    """Which of fast / auto / deep applies to the revert probe.
+
+    `--only revert-probe` asks for the probe by name, so it overrides `--fast`:
+    the alternative is running nothing at all and reporting that as a result.
+    """
     onlys = {s.strip() for item in args.only for s in item.split(",") if s.strip()}
-    return _probe.NAME in onlys
+    if args.mode == "fast" and _probe.NAME in onlys:
+        return "deep"
+    return args.mode
 
 
 def _deferred(name: str, title: str, has_tests: bool) -> CheckResult:
@@ -342,10 +366,10 @@ def _deferred(name: str, title: str, has_tests: bool) -> CheckResult:
     # verdict yet. "skipped" would read as the user's choice.
     r.status = "inconclusive"
     r.note = (
-        "not run in fast mode -- `unfaked --deep` reverts the change and re-runs "
-        "the added tests"
+        "not run because --fast was asked for -- drop it and the probe reverts the "
+        "change and re-runs the added tests"
         if has_tests
-        else "no tests were added in this range, so --deep would have nothing to re-run"
+        else "no tests were added in this range, so the probe would have nothing to re-run"
     )
     return r.finalize()
 

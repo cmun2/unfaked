@@ -15,6 +15,7 @@ import re
 import subprocess
 import sys
 import tempfile
+import time
 from typing import Dict, List, Optional, Sequence, Tuple
 
 from ._finding import FAIL, INFO, WARN, CheckResult, Finding
@@ -38,7 +39,7 @@ class ProbeUnavailable(Exception):
 
 
 class RunOutcome:
-    __slots__ = ("results", "cases", "raw", "ok", "reason", "command")
+    __slots__ = ("results", "cases", "raw", "ok", "reason", "command", "timed_out")
 
     def __init__(self, command: str) -> None:
         self.results: Dict[str, str] = {}
@@ -47,6 +48,9 @@ class RunOutcome:
         self.ok = True
         self.reason = ""
         self.command = command
+        # A budget the caller set is not the same as a suite that hangs; the
+        # caller decides which message that is.
+        self.timed_out = False
 
 
 def _clean_env() -> Dict[str, str]:
@@ -146,6 +150,7 @@ class PytestRunner:
             )
         except subprocess.TimeoutExpired:
             out.ok = False
+            out.timed_out = True
             out.reason = "pytest did not finish within %ds" % timeout
             return out
         out.raw = _plain(proc.stdout.decode("utf-8", "replace"))
@@ -214,6 +219,7 @@ class NodeRunner:
                 payload = None
         except subprocess.TimeoutExpired:
             out.ok = False
+            out.timed_out = True
             out.reason = "%s did not finish within %ds" % (self.label, timeout)
             return out
         finally:
@@ -301,6 +307,7 @@ def run(
     dirty_paths: Sequence[str],
     timeout: int,
     evidence_cmd: str,
+    budget: Optional[int] = None,
 ) -> CheckResult:
     res = CheckResult(NAME, TITLE)
 
@@ -327,6 +334,33 @@ def run(
             )
         )
         return res
+
+    deadline = None if budget is None else time.monotonic() + budget
+
+    def remaining() -> int:
+        """Seconds the probe may still spend, as a whole.
+
+        The budget is what the caller is willing to wait for on an agent
+        hand-off, and the probe runs the suite twice. Applying it per run would
+        let the total reach double what was asked for.
+        """
+        if deadline is None:
+            return timeout
+        left = int(deadline - time.monotonic())
+        return min(timeout, max(left, 0))
+
+    def over_budget(command: str) -> CheckResult:
+        """The probe was stopped by a budget, not by anything wrong with the repo.
+
+        Saying "the suite does not run" here would be a false accusation: the
+        suite ran, it was simply slower than the caller was willing to wait for
+        on an agent hand-off.
+        """
+        return inconclusive(
+            "the added tests need longer than the %ds budget for this run" % budget,
+            "`unfaked --deep` runs the probe without one.",
+        )
+
 
     if not added_tests:
         return inconclusive(
@@ -358,10 +392,15 @@ def run(
     baseline_cases: Dict[str, str] = {}
     baseline_cmds: List[str] = []
     for kind, tests in by_kind.items():
-        outcome = runners[kind].run(tests, timeout)
+        left = remaining()
+        if left <= 0:
+            return over_budget(runners[kind].command_for(tests, shown=True)[0])
+        outcome = runners[kind].run(tests, left)
         baseline_cmds.append(outcome.command)
         baseline_cases.update(outcome.cases)
         if not outcome.ok:
+            if outcome.timed_out and budget is not None:
+                return over_budget(outcome.command)
             return inconclusive(
                 "the added tests do not run cleanly as committed (%s)" % outcome.reason,
                 "Fix the suite first: %s" % outcome.command,
@@ -402,8 +441,13 @@ def run(
             for t in passing_now:
                 by_kind_pass.setdefault(t.kind, []).append(t)
             for kind, tests in by_kind_pass.items():
-                outcome = runners[kind].in_directory(shadow.path).run(tests, timeout)
+                left = remaining()
+                if left <= 0:
+                    return over_budget(revert_cmd_display)
+                outcome = runners[kind].in_directory(shadow.path).run(tests, left)
                 revert_cmds.append(outcome.command)
+                if outcome.timed_out and budget is not None:
+                    return over_budget(outcome.command)
                 if not outcome.ok:
                     res.status = "inconclusive"
                     res.note = (

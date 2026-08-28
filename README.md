@@ -33,9 +33,11 @@ finding comes with a file, a line, and the command to reproduce it.
 ] } ] } }
 ```
 
-One line when there is nothing to report, the table only when there is. **222 ms**
-on `anthropic-sdk-python`, because the moment right after an agent says it is done
-is not a place anyone waits.
+Silent when there is nothing to report, the table only when there is — including
+the revert probe below, which is what makes the hook worth having. Static checks
+are **222 ms** on `anthropic-sdk-python`; the probe is given 20 seconds and says
+so if it needs more, because the moment right after an agent says it is done is
+not a place anyone waits.
 
 Or let the agent check its own work before it reports back:
 

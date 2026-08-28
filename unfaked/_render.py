@@ -204,8 +204,12 @@ def render(report: Report, st: Style, w: Optional[int] = None, quiet: bool = Fal
     inner = w - len(pad)
 
     if quiet and not report.count(FAIL) and not report.count(WARN):
-        # Hook mode with nothing to say. A tool that prints a table after every
-        # turn gets muted, and a muted tool reports nothing at all.
+        # Hook mode with nothing to say, so it says nothing. This runs after
+        # every turn, including the ones that changed no code, and a line that
+        # appears when nothing happened is the thing that gets a hook muted.
+        # `-v` brings the confirmation back for anyone wiring one up.
+        if not ctx.verbose:
+            return ""
         return "  %s %s\n" % (st.bgreen("▎"), st.grey(headline(report)))
 
     # --- header -----------------------------------------------------------

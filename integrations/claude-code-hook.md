@@ -24,14 +24,20 @@ every project):
 
 That is the whole integration. Defaults are already what a hook needs:
 
-- **fast mode** — static checks only, no test run. Measured at 222ms on
-  `anthropic-sdk-python` and 572ms on a 617-server dataset repo.
+- **the revert probe runs** — the check the other three cannot stand in for. It
+  is given 20 seconds; if the suite needs longer the report says so and names
+  the command to run it without a budget. Static checks alone are 222ms on
+  `anthropic-sdk-python`; the probe adds one filtered run of the added tests
+  against the current source and one against the base.
 - **`--exit-zero`** — never fails the hook. A verification tool that can kill
   your session is worse than no verification tool.
-- **`-q`** — one headline line when there is nothing to report. Without it you
-  get the full table after every turn, which is how a hook gets muted.
+- **`-q`** — prints nothing at all unless there is something to report. A line
+  that appears on turns where nothing happened is how a hook gets muted.
 - **silent where it does not apply** — not a git repo, or an empty diff, and it
   exits 0 with no output.
+
+Add `--probe-budget 5` if 20 seconds is more than you will wait, or `--fast` to
+go back to static checks only.
 
 ## Reviewing the whole session, not the last commit
 
@@ -52,14 +58,19 @@ everything since:
 }
 ```
 
-Without the pair, the default still covers the common case: if the working tree
-differs from `HEAD` those changes are what gets read, and if it is clean the last
-commit is. The header always names which of the two it was.
+**Use the pair.** Without it, a turn that changed nothing leaves a clean tree, so
+the range falls back to the last commit and every turn re-reports the same
+commit until you make another one. With the pair, a turn that changed nothing
+has an empty range and the hook stays silent.
 
-## Adding the probe back
+The header always names which range was read.
 
-The revert probe re-runs the suite once per added test, which is too slow for
-this hook. Run it yourself when the summary looks too good:
+## When the probe does not fit
+
+The probe runs the added tests twice: once as committed, once against the base
+in a detached worktree. That is two filtered runs, not two full suites — 1.7s on
+this repository. When it does not fit in the budget the report says which, and
+you can lift it:
 
 ```console
 $ uvx unfaked --deep
