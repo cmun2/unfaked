@@ -21,55 +21,67 @@ _CSS = """
 body{margin:0;padding:2.5rem 1.25rem 4rem;font:15px/1.6 ui-sans-serif,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
  background:var(--bg);color:var(--fg);-webkit-text-size-adjust:100%}
 .wrap{max-width:64rem;margin:0 auto}
-:root{--bg:#fbfbfa;--fg:#1c1b1a;--dim:#6d6a66;--line:#e3e0dc;--card:#fff;
- --fail:#b3261e;--warn:#8a6100;--ok:#1c6b3f;--accent:#2f5fd0;--code:#f4f2ef}
-@media (prefers-color-scheme:dark){:root{--bg:#131211;--fg:#eceae7;--dim:#9b9691;--line:#2c2a28;--card:#1a1918;
- --fail:#ff8a80;--warn:#e8b339;--ok:#6ed09a;--accent:#8fb0ff;--code:#211f1d}}
-:root[data-theme="light"]{--bg:#fbfbfa;--fg:#1c1b1a;--dim:#6d6a66;--line:#e3e0dc;--card:#fff;
- --fail:#b3261e;--warn:#8a6100;--ok:#1c6b3f;--accent:#2f5fd0;--code:#f4f2ef}
-:root[data-theme="dark"]{--bg:#131211;--fg:#eceae7;--dim:#9b9691;--line:#2c2a28;--card:#1a1918;
- --fail:#ff8a80;--warn:#e8b339;--ok:#6ed09a;--accent:#8fb0ff;--code:#211f1d}
+:root{--bg:#fbfbfa;--fg:#14130f;--dim:#6d6a66;--line:#e3e0dc;--card:#fff;
+ --fail:#d81f11;--fail-bg:#fdecea;--warn:#b87500;--warn-bg:#fff5e0;--ok:#0f9d58;--ok-bg:#e7f7ee;
+ --accent:#2f5fd0;--code:#f4f2ef;--shadow:0 1px 2px rgba(0,0,0,.05),0 8px 24px -12px rgba(0,0,0,.18)}
+@media (prefers-color-scheme:dark){:root{--bg:#0f0e0d;--fg:#f2f0ed;--dim:#9b9691;--line:#2c2a28;--card:#191817;
+ --fail:#ff6b5a;--fail-bg:#2a1512;--warn:#ffc046;--warn-bg:#2a2110;--ok:#3ddc97;--ok-bg:#0f2620;
+ --accent:#8fb0ff;--code:#211f1d;--shadow:0 1px 2px rgba(0,0,0,.4),0 12px 32px -14px rgba(0,0,0,.8)}}
+:root[data-theme="light"]{--bg:#fbfbfa;--fg:#14130f;--dim:#6d6a66;--line:#e3e0dc;--card:#fff;
+ --fail:#d81f11;--fail-bg:#fdecea;--warn:#b87500;--warn-bg:#fff5e0;--ok:#0f9d58;--ok-bg:#e7f7ee;
+ --accent:#2f5fd0;--code:#f4f2ef;--shadow:0 1px 2px rgba(0,0,0,.05),0 8px 24px -12px rgba(0,0,0,.18)}
+:root[data-theme="dark"]{--bg:#0f0e0d;--fg:#f2f0ed;--dim:#9b9691;--line:#2c2a28;--card:#191817;
+ --fail:#ff6b5a;--fail-bg:#2a1512;--warn:#ffc046;--warn-bg:#2a2110;--ok:#3ddc97;--ok-bg:#0f2620;
+ --accent:#8fb0ff;--code:#211f1d;--shadow:0 1px 2px rgba(0,0,0,.4),0 12px 32px -14px rgba(0,0,0,.8)}
 h1{font-size:1rem;font-weight:650;margin:0;letter-spacing:-.01em}
 .sub{color:var(--dim);font-size:.8rem;margin:.3rem 0 0}
 .mono{font-family:ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,monospace}
 .head{display:flex;flex-wrap:wrap;gap:.5rem 1rem;align-items:baseline;
  border-bottom:1px solid var(--line);padding-bottom:1rem;margin-bottom:2rem}
-.verdict{border-left:3px solid var(--ok);padding:.1rem 0 .1rem 1rem;margin:0 0 2rem;
- font-size:1.45rem;line-height:1.35;font-weight:600;letter-spacing:-.02em}
-.verdict.fail{border-color:var(--fail)}.verdict.warn{border-color:var(--warn)}
-.hint{color:var(--dim);font-size:.85rem;margin:-1.25rem 0 2rem;padding-left:1.05rem}
-.probe{border:1px solid var(--line);border-radius:10px;padding:1.1rem 1.25rem;margin:0 0 2rem;background:var(--card)}
-.probe h2{font-size:.72rem;text-transform:uppercase;letter-spacing:.09em;color:var(--dim);margin:0 0 .85rem;font-weight:600}
-.bar{display:flex;height:.55rem;border-radius:99px;overflow:hidden;background:var(--line)}
-.bar i{display:block}
+.verdict{border-radius:12px;padding:1.15rem 1.35rem;margin:0 0 1.75rem;
+ font-size:1.6rem;line-height:1.3;font-weight:650;letter-spacing:-.025em;
+ background:var(--ok-bg);color:var(--ok);border:1px solid transparent}
+.verdict.fail{background:var(--fail-bg);color:var(--fail)}
+.verdict.warn{background:var(--warn-bg);color:var(--warn)}
+.hint{color:var(--dim);font-size:.85rem;margin:-1rem 0 1.75rem;padding-left:1.35rem}
+.probe{border:1px solid var(--line);border-radius:12px;padding:1.4rem 1.5rem;margin:0 0 2rem;
+ background:var(--card);box-shadow:var(--shadow)}
+.probe h2{font-size:.7rem;text-transform:uppercase;letter-spacing:.1em;color:var(--dim);margin:0 0 1.1rem;font-weight:650}
+.nums{display:flex;flex-wrap:wrap;gap:2.5rem;margin:0 0 1.1rem}
+.num{line-height:1}
+.num b{display:block;font-size:2.6rem;font-weight:700;letter-spacing:-.04em;
+ font-variant-numeric:tabular-nums;font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
+.num span{display:block;margin-top:.45rem;font-size:.8rem;color:var(--dim);max-width:15rem}
+.num.d b{color:var(--ok)}.num.s b{color:var(--warn)}
+.bar{display:flex;height:.9rem;border-radius:99px;overflow:hidden;background:var(--line)}
+.bar i{display:block;animation:grow .55s cubic-bezier(.2,.8,.2,1) both}
+@keyframes grow{from{transform:scaleX(0);transform-origin:left}to{transform:scaleX(1)}}
+@media (prefers-reduced-motion:reduce){.bar i{animation:none}}
 .bar .d{background:var(--ok)}.bar .s{background:var(--warn)}
-.key{display:flex;flex-wrap:wrap;gap:1.25rem;margin-top:.75rem;font-size:.82rem;color:var(--dim)}
-.key b{color:var(--fg);font-weight:600}
-.key span::before{content:"";display:inline-block;width:.5rem;height:.5rem;border-radius:2px;margin-right:.45rem}
-.key .d::before{background:var(--ok)}.key .s::before{background:var(--warn)}
 table.checks{width:100%;border-collapse:collapse;margin:0 0 2.5rem;font-size:.88rem}
-table.checks td{padding:.55rem .5rem;border-bottom:1px solid var(--line);vertical-align:top}
-table.checks td:first-child{width:1.5rem;text-align:center}
+table.checks td{padding:.6rem .5rem;border-bottom:1px solid var(--line);vertical-align:top}
+table.checks td:first-child{width:1.5rem;text-align:center;font-weight:700}
 table.checks .name{font-weight:600;white-space:nowrap}
 table.checks .desc{color:var(--dim)}
-table.checks .tally{text-align:right;white-space:nowrap;color:var(--dim)}
+table.checks .tally{text-align:right;white-space:nowrap;color:var(--dim);font-variant-numeric:tabular-nums}
 table.checks .note{color:var(--dim);font-size:.82rem;padding-top:0}
 .f-fail{color:var(--fail)}.f-warn{color:var(--warn)}.f-ok{color:var(--ok)}.f-dim{color:var(--dim)}
-.finding{border:1px solid var(--line);border-left-width:3px;border-radius:10px;background:var(--card);
- padding:1.1rem 1.25rem;margin:0 0 1rem}
+.finding{border:1px solid var(--line);border-left-width:4px;border-radius:12px;background:var(--card);
+ padding:1.2rem 1.35rem;margin:0 0 1rem;box-shadow:var(--shadow)}
 .finding.FAIL{border-left-color:var(--fail)}.finding.WARN{border-left-color:var(--warn)}
 .finding.INFO{border-left-color:var(--line)}
 .finding .loc{font-size:.78rem;color:var(--accent);word-break:break-all}
-.finding .t{font-weight:600;margin:.3rem 0 0;letter-spacing:-.01em}
-pre{margin:.85rem 0 0;padding:.75rem .9rem;background:var(--code);border-radius:7px;
- overflow-x:auto;font-size:.8rem;line-height:1.55}
+.finding .t{font-weight:650;margin:.35rem 0 0;letter-spacing:-.015em;font-size:1.02rem}
+pre{margin:.9rem 0 0;padding:.8rem .95rem;background:var(--code);border-radius:8px;
+ overflow-x:auto;font-size:.8rem;line-height:1.6}
 pre.snippet .ln{color:var(--dim);user-select:none}
-dl{margin:.9rem 0 0;display:grid;grid-template-columns:auto 1fr;gap:.35rem .85rem;font-size:.87rem}
-dt{color:var(--dim);font-size:.72rem;text-transform:uppercase;letter-spacing:.07em;padding-top:.18rem}
+dl{margin:.95rem 0 0;display:grid;grid-template-columns:auto 1fr;gap:.4rem .9rem;font-size:.87rem}
+dt{color:var(--dim);font-size:.7rem;text-transform:uppercase;letter-spacing:.08em;padding-top:.2rem;font-weight:650}
 dd{margin:0}
 footer{margin-top:2.5rem;padding-top:1rem;border-top:1px solid var(--line);
  color:var(--dim);font-size:.78rem;display:flex;flex-wrap:wrap;gap:.5rem 1rem;justify-content:space-between}
 """
+
 
 _GLYPH = {"fail": "&#10007;", "warn": "&#9650;", "ok": "&#10003;",
           "inconclusive": "?", "skipped": "&ndash;"}
@@ -92,19 +104,23 @@ def _probe_panel(check: Dict[str, Any]) -> str:
     runner = escape(str(stats.get("runner") or ""))
     return (
         '<section class="probe">'
-        '<h2>Revert probe%s</h2>'
+        "<h2>Revert probe%s</h2>"
+        '<div class="nums">'
+        '<div class="num d"><b>%d</b><span>of the %d added tests fail when the '
+        "change is reverted &mdash; these test the change</span></div>"
+        '<div class="num s"><b>%d</b><span>pass either way &mdash; they do not '
+        "distinguish the change from the baseline</span></div>"
+        "</div>"
         '<div class="bar"><i class="d" style="width:%.4f%%"></i>'
         '<i class="s" style="width:%.4f%%"></i></div>'
-        '<div class="key">'
-        '<span class="d"><b>%d</b> fail with the change reverted</span>'
-        '<span class="s"><b>%d</b> pass either way</span>'
-        "</div></section>"
+        "</section>"
         % (
             " &middot; %s" % runner if runner else "",
+            distinguishing,
+            added,
+            survived,
             pct,
             100.0 - pct,
-            distinguishing,
-            survived,
         )
     )
 
