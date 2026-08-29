@@ -35,6 +35,7 @@ from ._lang import (
     language,
 )
 from ._changeset import ChangeSet, resolve as resolve_changeset, write_session
+from . import _html
 from ._render import Report, Style, color_enabled, headline, render
 
 CHECKS = [
@@ -171,6 +172,11 @@ def build_parser() -> argparse.ArgumentParser:
         # So one probe run can produce both. CI wants the readable report in the
         # log and the payload as an artifact, and the probe is the expensive part.
         help="also write the JSON payload here, keeping the report on stdout",
+    )
+    p.add_argument(
+        "--html-file",
+        metavar="PATH",
+        help="also write a self-contained HTML report here",
     )
     p.add_argument("--no-color", action="store_true", help="disable ANSI colour")
     p.add_argument("--exit-zero", action="store_true", help="always exit 0")
@@ -341,6 +347,24 @@ def _skipped(name: str, title: str) -> CheckResult:
     return r.finalize()
 
 
+def _write(path: str, text: str) -> bool:
+    """Write a report beside the run, making the directory if it is missing.
+
+    `--json-file reports/unfaked.json` is the shape CI asks for, and failing
+    because `reports/` does not exist yet would make every workflow carry an
+    mkdir ahead of the call.
+    """
+    try:
+        parent = os.path.dirname(os.path.abspath(path))
+        os.makedirs(parent, exist_ok=True)
+        with open(path, "w", encoding="utf-8") as fh:
+            fh.write(text)
+    except OSError as exc:
+        sys.stderr.write("unfaked: cannot write %s (%s)\n" % (path, exc))
+        return False
+    return True
+
+
 def _probe_mode(args) -> str:
     """Which of fast / auto / deep applies to the revert probe.
 
@@ -428,7 +452,7 @@ def main(argv: Optional[List[str]] = None) -> int:
         sys.stderr.write("unfaked: %s\n" % exc)
         return 2
 
-    if args.json or args.json_file:
+    if args.json or args.json_file or args.html_file:
         payload = {
             "version": __version__,
             "repo": ctx.repo,
@@ -451,19 +475,10 @@ def main(argv: Optional[List[str]] = None) -> int:
             "exit_code": 0 if args.exit_zero else report.exit_code,
             "checks": [c.to_dict() for c in report.checks],
         }
-        if args.json_file:
-            try:
-                # `--json-file reports/unfaked.json` is the shape CI asks for,
-                # and failing because `reports/` does not exist yet would make
-                # every workflow carry an mkdir ahead of the call.
-                parent = os.path.dirname(os.path.abspath(args.json_file))
-                os.makedirs(parent, exist_ok=True)
-                with open(args.json_file, "w", encoding="utf-8") as fh:
-                    json.dump(payload, fh, indent=2, sort_keys=False)
-                    fh.write("\n")
-            except OSError as exc:
-                sys.stderr.write("unfaked: cannot write %s (%s)\n" % (args.json_file, exc))
-                return 2
+        if args.json_file and not _write(args.json_file, json.dumps(payload, indent=2) + "\n"):
+            return 2
+        if args.html_file and not _write(args.html_file, _html.render(payload)):
+            return 2
         if args.json:
             json.dump(payload, sys.stdout, indent=2, sort_keys=False)
             sys.stdout.write("\n")

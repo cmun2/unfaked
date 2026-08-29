@@ -1123,5 +1123,100 @@ class TestCli(unittest.TestCase):
             self.assertIn("cannot write", err.getvalue())
 
 
+class TestHtmlReport(unittest.TestCase):
+    """One file that opens the same offline, in CI, or attached to a review."""
+
+    def _report(self, name, extra=()):
+        import contextlib
+        import io
+        import tempfile
+
+        from unfaked import cli
+
+        r = base_repo(name)
+        ctx = r.__enter__()
+        return r, ctx, cli, os.path.join(tempfile.mkdtemp(), "sub", "report.html"), io, contextlib
+
+    def test_it_makes_a_self_contained_document(self):
+        r, ctx, cli, target, io, contextlib = self._report("html-basic")
+        try:
+            ctx.write("tests/test_empty.py", "def test_todo():\n    pass\n")
+            ctx.commit("add coverage")
+            with contextlib.redirect_stdout(io.StringIO()) as buf:
+                cli.main([ctx.path, "--html-file", target, "--exit-zero"] + list(NO_PROBE))
+
+            html = open(target, encoding="utf-8").read()
+            # A report that fetches anything is a report that renders differently
+            # on the machine it is read on, and blank behind a CI proxy.
+            self.assertNotIn("<script", html)
+            self.assertNotIn("http://", html)
+            self.assertNotIn("https://", html)
+            self.assertIn("hollow-tests", html)
+            # ...and the readable report still went to stdout
+            self.assertIn("hollow-tests", buf.getvalue())
+        finally:
+            r.__exit__(None, None, None)
+
+    def test_a_finding_cannot_inject_markup(self):
+        """Every field in it came from the repository, which is not trusted."""
+        r, ctx, cli, target, io, contextlib = self._report("html-escape")
+        try:
+            ctx.write(
+                "tests/test_x.py",
+                "def test_todo():\n    \"\"\"<img src=x onerror=alert(1)>\"\"\"\n    pass\n",
+            )
+            ctx.commit("add coverage")
+            with contextlib.redirect_stdout(io.StringIO()):
+                cli.main([ctx.path, "--html-file", target, "--exit-zero"] + list(NO_PROBE))
+
+            html = open(target, encoding="utf-8").read()
+            self.assertNotIn("<img", html)
+            self.assertIn("&lt;img", html)
+        finally:
+            r.__exit__(None, None, None)
+
+    def test_no_probe_ratio_is_drawn_when_the_probe_did_not_run(self):
+        """A bar built from zeroes would claim a measurement nobody made."""
+        r, ctx, cli, target, io, contextlib = self._report("html-noprobe")
+        try:
+            ctx.write("tests/test_ok.py", "def test_ok():\n    assert True\n")
+            ctx.commit("add coverage")
+            with contextlib.redirect_stdout(io.StringIO()):
+                cli.main([ctx.path, "--html-file", target, "--fast", "--exit-zero"])
+
+            self.assertNotIn('class="bar"', open(target, encoding="utf-8").read())
+        finally:
+            r.__exit__(None, None, None)
+
+    def test_it_creates_the_directory_it_was_given(self):
+        r, ctx, cli, target, io, contextlib = self._report("html-mkdir")
+        try:
+            ctx.write("tests/test_ok.py", "def test_ok():\n    assert True\n")
+            ctx.commit("add coverage")
+            with contextlib.redirect_stdout(io.StringIO()):
+                cli.main([ctx.path, "--html-file", target, "--exit-zero"] + list(NO_PROBE))
+            self.assertTrue(os.path.exists(target))
+        finally:
+            r.__exit__(None, None, None)
+
+    def test_it_reports_rather_than_crashes_when_it_cannot_write(self):
+        r, ctx, cli, _t, io, contextlib = self._report("html-bad")
+        try:
+            ctx.write("tests/test_ok.py", "def test_ok():\n    assert True\n")
+            ctx.commit("add coverage")
+            blocker = os.path.join(ctx.path, "blocker")
+            with open(blocker, "w") as fh:
+                fh.write("not a directory\n")
+            with contextlib.redirect_stdout(io.StringIO()):
+                with contextlib.redirect_stderr(io.StringIO()) as err:
+                    code = cli.main(
+                        [ctx.path, "--html-file", os.path.join(blocker, "r.html")] + list(NO_PROBE)
+                    )
+            self.assertEqual(2, code)
+            self.assertIn("cannot write", err.getvalue())
+        finally:
+            r.__exit__(None, None, None)
+
+
 if __name__ == "__main__":
     unittest.main()

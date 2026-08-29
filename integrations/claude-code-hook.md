@@ -65,6 +65,23 @@ has an empty range and the hook stays silent.
 
 The header always names which range was read.
 
+## Reading it afterwards
+
+The terminal report is for the moment the agent stops. When something is flagged
+and you want to read the evidence without scrolling back through a session, add
+a second output:
+
+```json
+{ "type": "command",
+  "command": "uvx unfaked -q --exit-zero --html-file .unfaked/report.html" }
+```
+
+One self-contained file — no CDN, no font, no script — so it opens the same
+offline, as a CI artifact, or attached to a review. It carries the revert
+probe's ratio as a bar, then every finding with its snippet, its reasoning, and
+the command to reproduce it. `--json-file` still writes the machine-readable
+payload from the same run.
+
 ## When the probe does not fit
 
 The probe runs the added tests twice: once as committed, once against the base

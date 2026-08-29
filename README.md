@@ -45,6 +45,10 @@ Or let the agent check its own work before it reports back:
 npx skills add cmun2/unfaked
 ```
 
+Add `--html-file .unfaked/report.html` and the same run also writes a
+self-contained report you can open, attach to a review, or keep as a CI
+artifact — one file, no CDN, no script.
+
 → [Claude Code hook](integrations/claude-code-hook.md) · [agent skill](skills/unfaked/SKILL.md) · [PR gate](integrations/github-action.yml)
 
 ## The check that matters
