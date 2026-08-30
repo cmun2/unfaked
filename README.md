@@ -24,6 +24,27 @@ says "all tests passing", and nothing was fixed.
 dependencies, no API key, no LLM — every check is deterministic, and every
 finding comes with a file, a line, and the command to reproduce it.
 
+## It does not cry wolf
+
+The first thing any check like this has to earn is the right to run on every
+turn. Across **240 commits** from six widely-used Python projects — flask,
+requests, pytest, httpx, fastapi, pydantic — written by their maintainers, not
+by agents:
+
+| | |
+|---|---|
+| failures raised | **0** |
+| warnings raised | 18, all in one project |
+| what those 18 were | tests actually carrying `@pytest.mark.skip`, `pytest.skip(...)` or `@pytest.mark.xfail` |
+
+Every warning was a real disabled test. Nothing was invented.
+
+Reproduce it against any repository:
+
+```console
+$ for c in $(git log --format=%H -n 40); do uvx unfaked . --head $c --json; done
+```
+
 ## Run it the moment your agent stops
 
 ```jsonc

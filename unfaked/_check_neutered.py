@@ -10,7 +10,26 @@ from typing import Dict, List, Optional, Tuple
 
 from ._finding import FAIL, INFO, WARN, CheckResult, Finding
 from ._git import FileDiff
-from ._lang import is_build_artifact, is_lockfile, is_test_file, PYTHON, JSTS, blank_string_literals, is_code, language
+from ._lang import (
+    is_build_artifact,
+    is_lockfile,
+    is_test_file,
+    PYTHON,
+    JSTS,
+    blank_string_literals,
+    discover_tests,
+    is_code,
+    language,
+)
+
+_TEST_DEF = re.compile(
+    r"""(?x)
+    (?: def \s+ (?P<py>\w+) \s* \(          # python: def test_x(
+      | \b (?:it|test) \s* \( \s*          # js: it("x"  /  test('x'
+          ['\"`] (?P<js>[^'\"`]+)
+    )"""
+)
+
 
 NAME = "neutered-checks"
 TITLE = "checks switched off"
@@ -300,12 +319,38 @@ def run(
                 )
 
         # --- weakened assertions -------------------------------------------
+        # Lines belonging to a test that replaced a differently-named one.
+        #
+        # Deleting one test and writing another in its place puts both in the
+        # same hunk, and their assertions often share a variable name -- enough
+        # to look like one line rewritten into a weaker one. The two cases are
+        # told apart by the name: a test rewritten in place keeps it, a
+        # replacement does not. Measured on 240 commits of six public
+        # repositories this was the only thing reported, and it was a
+        # replacement -- flask 06ea505c dropped a greenlet test for a
+        # thread-pool one whose next line asserts *more* than the old one did.
+        replaced_test_lines: set = set()
+        if src is not None and is_test_file(fd.path):
+            gone = set()
+            for hunk in fd.hunks:
+                for _n, text in hunk.removed:
+                    m = _TEST_DEF.search(text)
+                    if m:
+                        gone.add(m.group("py") or m.group("js"))
+            for t in discover_tests(fd.path, src):
+                is_new = fd.status == "A" or t.lineno in added
+                name = t.qualname.replace(" > ", ".").split(".")[-1]
+                if is_new and name not in gone:
+                    replaced_test_lines.update(range(t.lineno, t.end_lineno + 1))
+
         for hunk in fd.hunks:
             removed = [(n, t) for n, t in hunk.removed if _STRONG.search(t)]
             addeds = [(n, t) for n, t in hunk.added if _WEAK.search(t) and not _STRONG.search(t)]
             if not removed or not addeds:
                 continue
             for anum, atext in addeds:
+                if anum in replaced_test_lines:
+                    continue
                 best: Optional[Tuple[int, str, int]] = None
                 a_ids = set(_IDENT.findall(atext))
                 for rnum, rtext in removed:

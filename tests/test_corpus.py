@@ -863,6 +863,67 @@ class TestNeuteredWeakenedAssertions(unittest.TestCase):
         finally:
             r.cleanup()
 
+    def test_control_a_replacement_test_is_not_a_weakening(self):
+        """One test deleted, a differently-named one written in its place.
+
+        Both land in the same hunk and their assertions share a variable name,
+        which is enough to look like one line rewritten into a weaker one. It
+        is not: the old test is gone, and the new one is free to assert
+        whatever it is about. This is the shape that flask 06ea505c has, the
+        only thing reported across 240 commits of six public repositories.
+        """
+        r = Repo("b4-replaced")
+        r.write("src/calc.py", SRC_BEFORE)
+        r.write(
+            "tests/test_calc.py",
+            "from src.calc import add\n\n\n"
+            "def test_add_via_helper():\n"
+            "    result = add(1, 2)\n"
+            "    assert result == 3\n",
+        )
+        r.commit("initial")
+        try:
+            r.write(
+                "tests/test_calc.py",
+                "from src.calc import add\n\n\n"
+                "def test_add_over_a_range():\n"
+                "    result = [add(n, 1) for n in range(3)]\n"
+                "    assert result is not None\n"
+                "    assert result == [1, 2, 3]\n",
+            )
+            r.commit("cover the range instead")
+            payload, code = r.run(*NO_PROBE)
+            self.assertEqual([], fails(payload, "neutered-checks"), payload["checks"])
+            self.assertEqual(0, code)
+        finally:
+            r.cleanup()
+
+    def test_a_rewrite_that_keeps_the_name_is_still_a_weakening(self):
+        """The name is what separates the two. Same test, weaker assertion."""
+        r = Repo("b4-samename")
+        r.write("src/calc.py", SRC_BEFORE)
+        r.write(
+            "tests/test_calc.py",
+            "from src.calc import add\n\n\n"
+            "def test_add():\n    result = add(1, 2)\n    assert result == 3\n",
+        )
+        r.commit("initial")
+        try:
+            r.write(
+                "tests/test_calc.py",
+                "import unittest\n\nfrom src.calc import add\n\n\n"
+                "class AddTest(unittest.TestCase):\n"
+                "    def test_add(self):\n"
+                "        result = add(1, 2)\n"
+                "        self.assertTrue(result)\n",
+            )
+            r.commit("port to unittest")
+            payload, code = r.run(*NO_PROBE)
+            hits = fails(payload, "neutered-checks")
+            self.assertTrue(any("weakened" in f["title"] for f in hits), payload["checks"])
+        finally:
+            r.cleanup()
+
     def test_control_changed_but_still_specific(self):
         r = Repo("b4-control")
         r.write("src/calc.py", SRC_BEFORE)
